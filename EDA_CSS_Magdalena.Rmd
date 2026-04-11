@@ -1,0 +1,864 @@
+---
+title: "Estimación de Concentración de Sedimentos en Suspensión en el Río Magdalena mediante Imágenes Satelitales Sentinel-2"
+subtitle: "Análisis Exploratorio de Datos · Tesis de Pregrado en Geología"
+author: "Francisco Javier Morales Carroll · Universidad del Norte"
+date: "`r format(Sys.Date(), '%d de %B de %Y')`"
+output:
+  html_document:
+    theme: flatly
+    highlight: tango
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 3
+    code_folding: show
+    fig_width: 10
+    fig_height: 5
+    css: |
+      body { font-family: 'Lato', sans-serif; color: #1c2331; }
+      h1, h2, h3 { font-family: 'Merriweather', serif; }
+      .stat-box { background: #f7f8fa; border-radius: 10px; padding: 18px 24px;
+                  border: 1px solid #e2e6ea; text-align: center; display: inline-block;
+                  margin: 6px; min-width: 140px; }
+      .stat-val { font-size: 28px; font-weight: 700; color: #1a6b9a; }
+      .stat-lbl { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em; }
+      .formula-box { background: #e8f2fa; border: 1px solid #aacde4; border-radius: 6px;
+                     padding: 14px 20px; font-family: monospace; font-size: 15px; margin: 12px 0; }
+      .info-card { background: #fff; border-radius: 10px; padding: 20px 24px;
+                   border: 1px solid #e2e6ea; margin-bottom: 16px;
+                   box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+      .accent-left { border-left: 4px solid #1a6b9a; }
+      .orange-left  { border-left: 4px solid #e07b2a; }
+      .note { background: #fff8e1; border-left: 4px solid #f59e0b;
+              padding: 10px 16px; border-radius: 4px; font-size: 13px; color: #6b7280; }
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, warning=FALSE, message=FALSE,
+                      fig.align="center", out.width="100%")
+```
+
+```{r fonts, echo=FALSE, results='asis'}
+cat('<link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@700&family=Lato:wght@300;400;600;700&display=swap" rel="stylesheet">')
+```
+
+---
+
+# 1. Introducción {.tabset}
+
+## Presentación del proyecto
+
+Este documento presenta el análisis exploratorio de datos desarrollado como parte de la **tesis de pregrado de Geología en la Universidad del Norte**, enfocada en el desarrollo de un modelo empírico para estimar la **concentración de sedimentos en suspensión (SSC)** en el tramo final del río Magdalena a partir de reflectancia superficial del agua obtenida de imágenes satelitales **Sentinel-2** del programa Copernicus de la Agencia Espacial Europea (ESA).
+
+Para llevar a cabo este estudio es necesario el uso de mediciones *in situ* de SSC que deben ser unidas con la reflectancia reportada por imágenes satelitales contemporáneas. El dataset final con el que se realizará el modelo está compuesto por aquellos puntos de las campañas de campo para los cuales fue posible obtener reflectancia de Sentinel-2 aplicando criterios de control de calidad rigurosos.
+
+Los datos de campo fueron tomados con un **perfilador LISST** (*laser in situ scattering and transmissometer*), que permite obtener perfiles verticales de SSC. Estos fueron tomados cada dos semanas en el período **Junio 2025 – Marzo 2026**, y a continuación se presentan los puntos finales que pudieron ser unidos con reflectancia de Sentinel-2 en un intervalo de tolerancia de **1 día** de diferencia entre la medición *in situ* y la captura de la imagen.
+
+## Configuración
+
+```{r librerias}
+library(tidyverse)
+library(lubridate)
+library(plotly)
+library(readxl)
+library(DT)
+library(knitr)
+library(kableExtra)
+library(scales)
+
+# ── Paleta de colores por km ──
+KM_COLORS <- c("0"="#1a6b9a","1"="#c5e71c","3"="#1aff00",
+               "11"="#2eaa6b","14"="#6a00ed","17"="#e07b2a",
+               "18"="#c0392b","19"="#7b52ab")
+km_col <- function(km) {
+  col <- KM_COLORS[as.character(km)]
+  if(is.na(col)) "#1a6b9a" else col
+}
+
+BANDAS  <- c("aerosol","blue","green","red","rojo 1","rojo 2",
+             "rojo 3","NIR","rojo 4","SWIR1","SWIR2")
+INDICES <- c("RANS","VNES","NDTI","NIR/RED")
+SSCS    <- c("SSC","SSC2","SSC4")
+MESES   <- c("Ene","Feb","Mar","Abr","May","Jun",
+             "Jul","Ago","Sep","Oct","Nov","Dic")
+```
+
+## Carga de datos
+
+```{r carga_datos}
+df <- read_csv("puntos_alternativos.csv", show_col_types=FALSE) %>%
+  mutate(
+    reflectance_date = as_datetime(reflectance_date),
+    scc_date         = as_datetime(scc_date),
+    mes              = month(reflectance_date),
+    km_chr           = as.character(km)
+  )
+
+# Hidrológicos
+Q_cal <- read_delim("Q_MEDIA_D@29037020.data", delim="|", show_col_types=FALSE) %>%
+  set_names(c("Fecha","Q_calamar")) %>% mutate(Fecha=as_datetime(Fecha))
+
+TSS_cal <- read_delim("TR_KT_D_QS_D@29037020.data", delim="|", show_col_types=FALSE) %>%
+  set_names(c("Fecha","TSS_calamar")) %>% mutate(Fecha=as_datetime(Fecha))
+
+Q_baq <- read_excel("caudal_ganara.xlsx") %>%
+  set_names(c("Fecha","Q_barranquilla")) %>% mutate(Fecha=as_datetime(Fecha))
+
+hydro <- inner_join(Q_cal, TSS_cal, by="Fecha") %>%
+  mutate(
+    ssc_derived = ((TSS_calamar*(1e6/86400)) / Q_calamar) * (1e6/1e3),
+    Q_sinincora = Q_calamar - (0.080649*Q_calamar - 126.19),
+    mes         = month(Fecha)
+  )
+```
+
+```{r stats_rapidos, echo=FALSE, results='asis'}
+cat(sprintf('
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin:20px 0;">
+  <div class="stat-box"><div class="stat-val">%d</div><div class="stat-lbl">Observaciones</div></div>
+  <div class="stat-box"><div class="stat-val">Jun 2025–Mar 2026</div><div class="stat-lbl">Período</div></div>
+  <div class="stat-box"><div class="stat-val">%d–%d</div><div class="stat-lbl">Rango SSC (mg/L)</div></div>
+  <div class="stat-box"><div class="stat-val">%d</div><div class="stat-lbl">Estaciones (km)</div></div>
+</div>',
+  nrow(df),
+  floor(min(df$SSC,na.rm=T)), ceiling(max(df$SSC,na.rm=T)),
+  length(unique(df$km))
+))
+```
+
+---
+
+# 2. Contexto {.tabset}
+
+## Área de estudio
+
+<div class="info-card">
+
+El **río Magdalena** es el ecosistema fluvial con la mayor área y extensión en el país, cubriendo un área de **257,438 km²** que representa el **24%** del territorio nacional. Su cuenca está caracterizada por alta actividad tectónica, altas pendientes que exceden los 45° y tiene como principales tributarios el río Cauca, Sogamoso, San Jorge y Cesar (Restrepo et al., 2006).
+
+Este representa el **mayor contribuyente de sedimentos en el Caribe** con una descarga de **144 × 10⁶ t yr⁻¹** (Higgins et al., 2016) y es uno de los principales influyentes en los cambios morfodinámicos del Caribe Colombiano, siendo considerado la principal fuente de sedimentos de las playas de la costa norte del Caribe colombiano (Restrepo et al., 2006).
+
+</div>
+
+A continuación se presentan las estaciones en las que se llevaron a cabo las mediciones originales de campo, nombradas por su distancia a la desembocadura:
+
+```{r mapa_estaciones}
+lats   <- c(11.10354,11.102,11.09628,11.09018,11.0755,11.0585,11.0428,
+            11.0249,11.0011327,10.9919,10.9782,10.9637,10.9546)
+lons   <- c(-74.8516,-74.8513,-74.8497,-74.8492,-74.8456,-74.8387,-74.8195,
+            -74.7911,-74.7660752,-74.7611,-74.7579,-74.7569,-74.7562)
+labels <- c("Km 0 +250","Km 0 +500","Km 1","Km 1+900","Km 3+500",
+            "Km 5+500","Km 7+900","Km 11+200","Km 14+800",
+            "Km 17+600","Km 18+200","Km 19+800","Km 19+940")
+
+plot_ly(lat=lats, lon=lons, type="scattermapbox", mode="markers+lines",
+        text=labels, hoverinfo="text",
+        marker=list(size=12, color="#1a6b9a"),
+        line=list(color="#1a6b9a")) %>%
+  layout(mapbox=list(style="carto-positron",
+                     center=list(lat=11.05, lon=-74.82), zoom=11.5),
+         margin=list(l=0,r=0,t=0,b=0), height=500)
+```
+
+## Estaciones de muestreo
+
+<div class="info-card">
+
+Las estaciones del **kilómetro 5 y 7** fueron descartadas del análisis final por estar fuertemente afectadas por actividades de dragado que introducen una mayor incertidumbre sobre su uso para entrenar el modelo. Las estaciones **0, 1 y 3** también introducen este tipo de ruido en menor medida.
+
+</div>
+
+```{r badges_km, echo=FALSE, results='asis'}
+for (km in sort(unique(df$km))) {
+  col <- km_col(km)
+  n   <- nrow(df[df$km==km,])
+  cat(sprintf('<div class="stat-box" style="border-top:3px solid %s;">
+    <div style="font-weight:700;color:%s;font-size:16px;">Km %s</div>
+    <div style="font-size:13px;color:#6b7280;">%d obs.</div>
+  </div>', col, col, km, n))
+}
+```
+
+## Estación Calamar e Inkora
+
+<div class="info-card">
+
+La **estación de monitoreo hidrológico del IDEAM** ubicada a unos 100 km de Barranquilla en Calamar es una fuente de datos adicionales para el análisis propuesto en este trabajo. En esta no se mide directamente la SSC pero sí variables fuertemente relacionadas como el **caudal (Q)** y la **carga sólida total (TSS)**, de las cuales puede derivarse una concentración equivalente de promedio diario e integrada en sección (**SSC = TSS / Q**), que puede ser comparada con las mediciones de campo y estimaciones de Sentinel-2 para evaluar su posible uso como fuente de datos adicionales para la calibración del modelo.
+
+Por otro lado, parte del caudal de Calamar se pierde al salir por el **Canal del Dique**. Para evaluar este efecto se usarán caudales de la **estación Inkora del IDEAM** que monitorea el caudal de este corredor fluvial.
+
+</div>
+
+```{r mapa_calamar}
+plot_ly(lat=c(10.2422934,10.30), lon=c(-74.9138168,-74.95),
+        type="scattermapbox", mode="markers",
+        text=c("Calamar, IDEAM (20037020)","INKORA K-7 (29037360)"),
+        hoverinfo="text",
+        marker=list(size=14, color="#1a6b9a")) %>%
+  layout(mapbox=list(style="carto-positron",
+                     center=list(lat=10.27, lon=-74.93), zoom=9),
+         margin=list(l=0,r=0,t=0,b=0), height=400)
+```
+
+---
+
+# 3. Planteamiento del problema
+
+<div class="info-card orange-left">
+
+El monitoreo de la CSS en ríos de gran caudal como el Magdalena representa un **desafío logístico y económico** considerable. Los métodos tradicionales requieren campañas de campo intensivas con equipos especializados como el perfilador LISST.
+
+La teledetección satelital con **Sentinel-2** ofrece una alternativa de bajo costo con cobertura sistemática. Sin embargo, en entornos estuarinos la estimación de CSS es compleja por la interferencia de otros constituyentes ópticos (materia orgánica disuelta, fitoplancton) y los efectos de marea y dragado que desacoplan la señal espectral de los procesos fluviales naturales.
+
+</div>
+
+```{r problema_tabla, echo=FALSE}
+data.frame(
+  Limitaciones_tradicional = c(
+    "Alta demanda de recursos para campañas de campo",
+    "Cobertura temporal limitada a fechas de muestreo",
+    "Variabilidad espacial difícil de capturar puntualmente",
+    "Influencia de dragados en zonas del canal navegable"
+  ),
+  Potencial_teledeteccion = c(
+    "Revisita cada 5 días con Sentinel-2",
+    "Cobertura espacial continua del tramo fluvial",
+    "Datos gratuitos accesibles mediante Google Earth Engine",
+    "Posibilidad de reconstrucción histórica de series de CSS"
+  )
+) %>%
+  kable(col.names=c("⚠ Limitaciones del monitoreo tradicional",
+                     "✅ Potencial de la teledetección"),
+        caption="Comparación entre monitoreo tradicional y satelital") %>%
+  kable_styling(bootstrap_options=c("striped","hover","bordered"), full_width=TRUE) %>%
+  column_spec(1, background="#fff8e1") %>%
+  column_spec(2, background="#e8f5e9")
+```
+
+---
+
+# 4. Objetivos
+
+## Objetivo general
+
+<div class="info-card accent-left">
+
+**Estimar** la concentración superficial de sedimento en suspensión (SSC) en el sector fluvial entre Calamar y Bocas de Ceniza (bajo río Magdalena) mediante un **modelo empírico** derivado de variables espectrales satelitales e información hidrosedimentológica *in situ*, orientado a caracterizar su variabilidad espaciotemporal.
+
+</div>
+
+## Objetivos específicos
+
+1. **Caracterizar** la respuesta espectral del agua asociada a diferentes concentraciones de sedimento en suspensión, utilizando bandas del visible, NIR y SWIR (e índices espectrales derivados), en el sector fluvial entre Calamar y Bocas de Ceniza.
+
+2. **Calibrar y validar** un modelo empírico de estimación de SSC a partir de variables espectrales satelitales, empleando información hidrosedimentológica *in situ* para el sector fluvial entre Calamar y Bocas de Ceniza.
+
+3. **Cuantificar** la variabilidad espaciotemporal de la SSC superficial en el sector fluvial entre Calamar y Bocas de Ceniza, a partir de la serie satelital estimada, incluyendo estacionalidad, eventos extremos y tendencias.
+
+---
+
+# 5. Marco Teórico {.tabset}
+
+## Teledetección de sedimentos
+
+<div class="info-card">
+
+La estimación de CSS mediante teledetección se basa en la relación entre la **reflectancia espectral del agua** y la concentración de partículas en suspensión. Los sedimentos aumentan la reflectancia en las bandas roja y NIR al incrementar la retrodispersión de la señal, mientras que la absorción domina en las bandas del azul y verde.
+
+La relación no es lineal: a concentraciones bajas la señal es más sensible, mientras que a concentraciones altas (~2000 mg/L) puede producirse saturación. En entornos estuarinos como el tramo final del Magdalena, la señal óptica puede verse afectada por material orgánico disuelto (CDOM), fitoplancton y la mezcla de agua dulce y salada.
+
+</div>
+
+## Sentinel-2 MSI
+
+```{r tabla_sentinel}
+data.frame(
+  Banda       = c("Aerosol (B1)","Blue (B2)","Green (B3)","Red (B4)",
+                  "Red Edge 1 (B5)","Red Edge 2 (B6)","Red Edge 3 (B7)",
+                  "NIR (B8)","Red Edge 4 (B8A)","SWIR1 (B11)","SWIR2 (B12)"),
+  `λ central (nm)` = c(443,492,560,665,704,740,783,833,865,1614,2202),
+  `Resolución` = c("60 m","10 m","10 m","10 m","20 m","20 m","20 m",
+                   "10 m","20 m","20 m","20 m"),
+  `Relevancia para SSC` = c(
+    "Corrección atmosférica",
+    "Sensible a sedimentos finos",
+    "Pico de reflectancia del agua",
+    "Clave para NDTI e índices de turbidez",
+    "Sensible a fitoplancton y material orgánico",
+    "Complementa B5",
+    "Separación sedimentos/clorofila",
+    "Alta reflectancia en agua turbia",
+    "Alta sensibilidad a SSC",
+    "Penetra neblina leve",
+    "Alta absorción en agua"
+  ),
+  check.names=FALSE
+) %>%
+  kable(caption="Bandas espectrales de Sentinel-2 relevantes para este estudio") %>%
+  kable_styling(bootstrap_options=c("striped","hover","condensed"), full_width=TRUE) %>%
+  row_spec(c(3,4,8), background="#e8f2fa", bold=TRUE)
+```
+
+## Índices espectrales
+
+```{r indices_tabla}
+data.frame(
+  Índice  = c("RANS","VNES","NDTI","NIR/RED"),
+  Fórmula = c(
+    "(Red+NIR) / (Red+NIR+Blue+Green+SWIR1+SWIR2)",
+    "(Red+RE1+NIR) / (Blue+Green+Red+NIR+SWIR1+SWIR2)",
+    "(Red−Green) / (Red+Green)",
+    "NIR / Red"
+  ),
+  Descripción = c(
+    "Índice de reflectancia normalizada para sedimentos. Resalta bandas de alta retrodispersión.",
+    "Variante extendida con bandas red edge. Mayor información espectral.",
+    "Índice de turbidez normalizado. Sensible a diferencias en rojo y verde.",
+    "Relación simple entre NIR y rojo. Directamente proporcional a SSC en rangos medios."
+  )
+) %>%
+  kable(caption="Índices espectrales evaluados en este estudio") %>%
+  kable_styling(bootstrap_options=c("striped","hover"), full_width=TRUE)
+```
+
+## Fórmulas derivadas
+
+### Transporte de sedimentos en suspensión (TSS)
+
+<div class="formula-box">TSS [ton/día] = SSC [mg/L] × Q [m³/s] × 0.0864</div>
+
+El factor **0.0864** convierte mg/L × m³/s a toneladas por día. Expresa cuántas toneladas de sedimento pasan por la sección transversal cada día (Gray & Simões, 2008; Vanoni, 1975).
+
+### SSC derivado de TSS y caudal
+
+<div class="formula-box">SSC [mg/L] = ( TSS [Kt/día] × 10⁶ / 86400 ) / Q [m³/s] × 10⁶ / 10³</div>
+
+Permite estimar la concentración de sedimentos cuando se dispone de TSS en Calamar y caudal simultáneo. Sirve como referencia independiente para validar estimaciones satelitales.
+
+### Corrección por Canal del Dique
+
+<div class="formula-box">Q_sinincora [m³/s] = Q_calamar − ( 0.080649 × Q_calamar − 126.19 )</div>
+
+La estación Calamar se ubica aguas arriba de la bifurcación con el Canal del Dique, canal artificial que desvía parte del caudal hacia la bahía de Cartagena. Esta fórmula empírica descuenta ese caudal derivado, estimando el caudal real que continúa por el Magdalena hacia Barranquilla.
+
+---
+
+# 6. Análisis Exploratorio de Datos {.tabset}
+
+## Estadísticos descriptivos
+
+```{r stats_desc}
+cols_s <- c("SSC", intersect(c(BANDAS,INDICES), names(df)))
+df[cols_s] %>%
+  summarise(across(everything(), list(
+    N    = ~sum(!is.na(.x)),
+    Media= ~round(mean(.x,na.rm=T),4),
+    SD   = ~round(sd(.x,na.rm=T),4),
+    Min  = ~round(min(.x,na.rm=T),4),
+    Med  = ~round(median(.x,na.rm=T),4),
+    Max  = ~round(max(.x,na.rm=T),4)
+  ), .names="{.col}_{.fn}")) %>%
+  pivot_longer(everything(), names_to=c("Variable","Stat"), names_sep="_") %>%
+  pivot_wider(names_from=Stat, values_from=value) %>%
+  DT::datatable(options=list(pageLength=15, scrollX=TRUE),
+                caption="Estadísticos descriptivos del dataset de calibración",
+                class="compact")
+```
+
+```{r stats_km}
+df %>% group_by(km) %>%
+  summarise(N=n(), `Media SSC`=round(mean(SSC,na.rm=T),1),
+            `SD`=round(sd(SSC,na.rm=T),1),
+            `Mín`=round(min(SSC,na.rm=T),1),
+            `Máx`=round(max(SSC,na.rm=T),1),
+            .groups="drop") %>%
+  kable(caption="SSC por estación de muestreo") %>%
+  kable_styling(bootstrap_options=c("striped","hover"), full_width=FALSE)
+```
+
+## Distribución de SSC
+
+```{r dist_ssc}
+fig_list <- list()
+for (km in sort(unique(df$km))) {
+  sub <- df %>% filter(km==!!km)
+  col <- km_col(km)
+  fig_list[[length(fig_list)+1]] <- list(
+    hist=list(x=sub$SSC, color=col, name=paste0("Km ",km)),
+    box =list(y=sub$SSC, color=col)
+  )
+}
+
+p_hist <- plot_ly()
+p_box  <- plot_ly()
+for (k in sort(unique(df$km))) {
+  sub <- df %>% filter(km==!!k); col <- km_col(k)
+  p_hist <- p_hist %>% add_histogram(x=sub$SSC, name=paste0("Km ",k),
+    marker=list(color=col,opacity=0.75), nbinsx=15)
+  p_box  <- p_box  %>% add_boxplot(y=sub$SSC, name=paste0("Km ",k),
+    marker=list(color=col), line=list(color=col), boxmean=TRUE, showlegend=FALSE)
+}
+
+subplot(p_hist, p_box, nrows=1, shareY=FALSE, titleX=TRUE) %>%
+  layout(barmode="overlay", height=420,
+         xaxis=list(title="SSC (mg/L)", showgrid=FALSE),
+         yaxis=list(title="Frecuencia"),
+         xaxis2=list(showgrid=FALSE),
+         yaxis2=list(title="SSC (mg/L)"),
+         legend=list(orientation="h",y=-0.25),
+         annotations=list(
+           list(text="<b>Histograma por Km</b>",x=0.23,y=1.06,xref="paper",yref="paper",showarrow=FALSE),
+           list(text="<b>Boxplot por Km</b>",x=0.75,y=1.06,xref="paper",yref="paper",showarrow=FALSE)
+         ))
+```
+
+## Series de tiempo
+
+```{r series_tiempo}
+fig <- plot_ly()
+for (km in sort(unique(df$km))) {
+  sub <- df %>% filter(km==!!km) %>% arrange(reflectance_date); col <- km_col(km)
+  fig <- fig %>% add_trace(x=sub$reflectance_date, y=sub$SSC, type="scatter",
+    mode="lines+markers", name=paste0("Km ",km),
+    line=list(color=col,width=2), marker=list(size=7,color=col))
+}
+fig %>% layout(xaxis=list(title="Fecha",showgrid=FALSE),
+               yaxis=list(title="SSC (mg/L)", gridcolor="#e2e6ea"),
+               height=380, legend=list(orientation="h",y=-0.25))
+```
+
+```{r serie_bandas}
+# Serie temporal de reflectancia — banda NIR
+fig2 <- plot_ly()
+for (km in sort(unique(df$km))) {
+  sub <- df %>% filter(km==!!km) %>% arrange(reflectance_date)
+  if(!"NIR" %in% names(sub)) next
+  col <- km_col(km)
+  fig2 <- fig2 %>% add_trace(x=sub$reflectance_date, y=sub$NIR, type="scatter",
+    mode="lines+markers", name=paste0("Km ",km),
+    line=list(color=col,width=2), marker=list(size=7,color=col))
+}
+fig2 %>% layout(title="Reflectancia NIR por estación",
+                xaxis=list(title="Fecha",showgrid=FALSE),
+                yaxis=list(title="NIR (sr⁻¹)", gridcolor="#e2e6ea"),
+                height=350, legend=list(orientation="h",y=-0.25))
+```
+
+## Scatter reflectancia / SSC
+
+```{r scatter_func}
+scatter_ssc <- function(data, x_var, y_var="SSC", transform="log", ajuste="lineal") {
+  data <- data %>% filter(!is.na(.data[[x_var]]), !is.na(.data[[y_var]]))
+  x    <- data[[x_var]]; y_raw <- data[[y_var]]
+  y    <- if(transform=="log") log(y_raw) else y_raw
+  y_lbl<- if(transform=="log") paste0("ln(",y_var,")") else paste0(y_var," (mg/L)")
+
+  if(ajuste=="lineal") {
+    cc  <- cor.test(x,y); r2 <- cc$estimate^2; p <- cc$p.value
+    fit <- lm(y~x); xl <- seq(min(x),max(x),length.out=200)
+    yl  <- coef(fit)[1]+coef(fit)[2]*xl
+    eq  <- paste0("y = ",round(coef(fit)[2],4),"x + ",round(coef(fit)[1],4))
+  } else {
+    ok  <- x>0 & y_raw>0
+    cc  <- cor.test(log(x[ok]),log(y_raw[ok])); r2 <- cc$estimate^2; p <- cc$p.value
+    fit <- lm(log(y_raw[ok])~log(x[ok]))
+    b_e <- coef(fit)[2]; a_p <- exp(coef(fit)[1])
+    xl  <- seq(min(x[ok]),max(x[ok]),length.out=200)
+    yl  <- if(transform=="log") log(a_p*(xl^b_e)) else a_p*(xl^b_e)
+    eq  <- paste0("y = ",round(a_p,4),"·x^",round(b_e,4))
+  }
+
+  p_txt <- if(p<0.0001)"< 0.0001" else round(p,4)
+  fig   <- plot_ly()
+  for (km in sort(unique(data$km))) {
+    sub  <- data %>% filter(km==!!km)
+    y_km <- if(transform=="log") log(sub[[y_var]]) else sub[[y_var]]
+    col  <- km_col(km)
+    fig  <- fig %>% add_markers(x=sub[[x_var]], y=y_km, name=paste0("Km ",km),
+      marker=list(size=9,color=col,line=list(width=1,color="white")),
+      hovertemplate=paste0("Km ",km,"<br>",x_var,": %{x:.4f}<br>",y_lbl,": %{y:.3f}<extra></extra>"))
+  }
+  fig %>%
+    add_lines(x=xl, y=yl, name="Regresión",
+              line=list(color="#c0392b",width=2,dash="dash")) %>%
+    layout(title=paste0("<b>",x_var," vs ",y_lbl,"</b><br><sup>",eq,
+                        " | R²=",round(r2,3),"  p=",p_txt,"  n=",nrow(data),"</sup>"),
+           xaxis=list(title=x_var,showgrid=FALSE),
+           yaxis=list(title=y_lbl, gridcolor="#e2e6ea"),
+           height=400, legend=list(orientation="h",y=-0.25))
+}
+```
+
+```{r scatter_red}
+scatter_ssc(df, "red", transform="log", ajuste="lineal")
+```
+
+```{r scatter_NIR}
+scatter_ssc(df, "NIR", transform="log", ajuste="lineal")
+```
+
+```{r scatter_rojo3}
+if("rojo 3" %in% names(df)) scatter_ssc(df, "rojo 3", transform="log", ajuste="lineal")
+```
+
+```{r scatter_potencial}
+scatter_ssc(df, "NIR", transform="log", ajuste="potencial")
+```
+
+## Ranking correlaciones
+
+```{r ranking_corr}
+transform <- "log"
+y_css     <- if(transform=="log") log(df$SSC) else df$SSC
+y_lbl_r   <- if(transform=="log") "ln(CSS)" else "CSS"
+
+res <- map_dfr(c(BANDAS,INDICES), function(col) {
+  if(!col %in% names(df)) return(NULL)
+  x  <- df[[col]]; ok <- !is.na(x) & !is.na(y_css)
+  if(sum(ok)<3) return(NULL)
+  cc <- cor.test(x[ok], y_css[ok])
+  tibble(variable=col, r=cc$estimate, r_abs=abs(cc$estimate), p=cc$p.value)
+}) %>% arrange(r_abs)
+
+colors <- ifelse(res$r>=0,"#2eaa6b","#c0392b")
+p_lbl  <- ifelse(res$p<0.001,"<0.001",as.character(round(res$p,3)))
+
+plot_ly(res, x=~r, y=~variable, type="bar", orientation="h",
+        marker=list(color=colors),
+        text=paste0("r=",round(res$r,3),"  p=",p_lbl),
+        textposition="outside",
+        hovertemplate="%{y}<br>r = %{x:.3f}<extra></extra>") %>%
+  layout(xaxis=list(title=paste0("Correlación de Pearson con ",y_lbl_r),
+                    range=c(-1.2,1.2), showgrid=TRUE, gridcolor="#e2e6ea"),
+         yaxis=list(showgrid=FALSE),
+         height=max(320,nrow(res)*32+80),
+         showlegend=FALSE,
+         shapes=list(
+           list(type="line",x0=0,x1=0,y0=0,y1=1,yref="paper",
+                line=list(dash="dash",color="#1c2331")),
+           list(type="line",x0=0.7,x1=0.7,y0=0,y1=1,yref="paper",
+                line=list(color="#2eaa6b",dash="dot",opacity=0.6)),
+           list(type="line",x0=-0.7,x1=-0.7,y0=0,y1=1,yref="paper",
+                line=list(color="#c0392b",dash="dot",opacity=0.6))
+         ),
+         annotations=list(
+           list(text="|r|=0.7",x=0.73,y=1.02,xref="x",yref="paper",
+                showarrow=FALSE,font=list(size=10,color="#2eaa6b")),
+           list(text="|r|=0.7",x=-0.73,y=1.02,xref="x",yref="paper",
+                showarrow=FALSE,font=list(size=10,color="#c0392b"),xanchor="right")
+         ))
+```
+
+```{r tabla_top5}
+res %>% arrange(desc(r_abs)) %>% head(8) %>%
+  mutate(r=round(r,4), r_abs=round(r_abs,4), p=round(p,5),
+         Dirección=ifelse(r>0,"↑ Positiva","↓ Negativa")) %>%
+  kable(caption="Top correlaciones con SSC") %>%
+  kable_styling(bootstrap_options=c("striped","hover"), full_width=FALSE) %>%
+  column_spec(2, bold=TRUE, color=ifelse(res %>% arrange(desc(r_abs)) %>% head(8) %>% pull(r)>0,"#2eaa6b","#c0392b"))
+```
+
+## Matriz de correlación
+
+```{r matriz_corr}
+transform_corr <- "log"
+cols_corr <- intersect(c(BANDAS,INDICES,"SSC"), names(df))
+dc <- df[cols_corr]
+if(transform_corr=="log") dc$SSC <- log(dc$SSC)
+labels <- ifelse(cols_corr=="SSC" & transform_corr=="log","ln(CSS)",cols_corr)
+cm     <- cor(dc, use="pairwise.complete.obs")
+colnames(cm) <- rownames(cm) <- labels
+
+plot_ly(z=cm, x=colnames(cm), y=rownames(cm), type="heatmap",
+        colorscale="RdBu", zmid=0, zmin=-1, zmax=1,
+        text=round(cm,2), texttemplate="%{text}",
+        textfont=list(size=9),
+        hovertemplate="X: %{x}<br>Y: %{y}<br>r = %{z:.3f}<extra></extra>") %>%
+  layout(height=520, xaxis=list(tickangle=-45),
+         title="Matriz de correlación de Pearson")
+```
+
+## Mapa de calor espacio-temporal
+
+```{r heatmap_st}
+pivot <- df %>%
+  mutate(fecha_str=format(as.Date(reflectance_date),"%Y-%m-%d")) %>%
+  group_by(km, fecha_str) %>%
+  summarise(SSC=mean(SSC,na.rm=TRUE), .groups="drop") %>%
+  pivot_wider(names_from=fecha_str, values_from=SSC) %>%
+  arrange(desc(km))
+
+mat   <- as.matrix(pivot[,-1])
+dates <- colnames(pivot)[-1]
+
+plot_ly(z=mat, x=dates, y=paste0("Km ",pivot$km),
+        type="heatmap", colorscale="YlOrRd",
+        xgap=2, ygap=2,
+        hovertemplate="Fecha: %{x}<br>%{y}<br>SSC: %{z:.1f} mg/L<extra></extra>",
+        colorbar=list(title=list(text="SSC (mg/L)"))) %>%
+  layout(height=max(300,nrow(pivot)*60+100),
+         title="SSC promedio por estación y fecha de imagen",
+         xaxis=list(title="Fecha", tickangle=-45, showgrid=FALSE),
+         yaxis=list(showgrid=FALSE))
+```
+
+## Climatograma
+
+```{r climatograma}
+fig <- plot_ly()
+for (m in 1:12) {
+  sub <- df %>% filter(mes==m); if(nrow(sub)==0) next
+  fig <- fig %>% add_boxplot(y=sub$SSC, x=rep(MESES[m],nrow(sub)),
+    showlegend=FALSE, marker=list(color="#1a6b9a",opacity=0.35,size=4),
+    line=list(color="#1a6b9a"), boxmean=TRUE, hoverinfo="skip")
+}
+for (km in sort(unique(df$km))) {
+  sub <- df %>% filter(km==!!km); col <- km_col(km)
+  fig <- fig %>% add_markers(x=MESES[sub$mes], y=sub$SSC, name=paste0("Km ",km),
+    marker=list(size=8,color=col,line=list(width=1,color="white"),opacity=0.9),
+    hovertemplate=paste0("Km ",km,"<br>%{x}<br>SSC: %{y:.1f} mg/L<extra></extra>"))
+}
+means <- df %>% group_by(mes) %>% summarise(m=mean(SSC,na.rm=TRUE),.groups="drop")
+fig <- fig %>% add_trace(x=MESES[means$mes], y=means$m, type="scatter",
+  mode="lines+markers", name="Media mensual",
+  line=list(color="#1c2331",width=2.5,dash="dash"),
+  marker=list(size=8,color="#1c2331"))
+fig %>% layout(boxmode="overlay", height=450,
+  title="Distribución mensual de SSC — período de estudio",
+  xaxis=list(title="Mes",categoryorder="array",categoryarray=MESES,showgrid=FALSE),
+  yaxis=list(title="SSC (mg/L)", gridcolor="#e2e6ea"),
+  legend=list(orientation="h",y=-0.25))
+```
+
+## Firmas espectrales
+
+```{r firmas_esp}
+WL_NAMES_V <- c("aerosol","blue","green","red","rojo 1","rojo 2",
+                "rojo 3","NIR","rojo 4","SWIR1","SWIR2")
+WL_REAL_V  <- c(443.9,496.6,560,664.5,703.9,740.2,782.5,835.1,864.8,1613.7,2202.4)
+
+sub <- df %>% arrange(SSC) %>% as.data.frame()
+req_b <- all(WL_NAMES_V %in% names(sub))
+
+if(req_b) {
+  ssc_min <- min(sub$SSC,na.rm=T); ssc_max <- max(sub$SSC,na.rm=T)
+  ssc_col <- function(ssc) {
+    t <- (ssc-ssc_min)/(ssc_max-ssc_min+1e-9)
+    sprintf("rgb(255,%d,0)", as.integer(165*(1-t)))
+  }
+  band_vis <- WL_NAMES_V[1:9]; wl_vis <- WL_REAL_V[1:9]
+  all_r    <- unlist(lapply(WL_NAMES_V, function(b) sub[[b]]))
+  y_min <- max(0,min(all_r,na.rm=T)*0.90); y_max <- max(all_r,na.rm=T)*1.08
+
+  fig <- plot_ly() %>% layout(
+    xaxis =list(domain=c(0,0.72),title="Longitud de onda (nm)",range=c(400,950),showgrid=FALSE),
+    xaxis2=list(domain=c(0.76,1),showgrid=FALSE,range=c(0,320),
+                tickvals=c(64,114,232,282),ticktext=c("1614","1650","2202","2250")),
+    yaxis =list(title="Reflectancia (sr⁻¹)",range=c(y_min,y_max),gridcolor="#e2e6ea"),
+    yaxis2=list(anchor="x2",range=c(y_min,y_max),showgrid=TRUE,gridcolor="#e2e6ea"),
+    height=500, hovermode="closest",
+    title="Firmas espectrales — coloreadas por SSC",
+    shapes=c(
+      list(list(type="rect",x0=458,x1=523,y0=0,y1=1,yref="paper",
+                fillcolor="rgba(32,32,229,0.10)",line=list(width=0),xref="x")),
+      list(list(type="rect",x0=543,x1=578,y0=0,y1=1,yref="paper",
+                fillcolor="rgba(0,200,0,0.10)",line=list(width=0),xref="x")),
+      list(list(type="rect",x0=650,x1=680,y0=0,y1=1,yref="paper",
+                fillcolor="rgba(228,0,0,0.10)",line=list(width=0),xref="x")),
+      list(list(type="rect",x0=785,x1=900,y0=0,y1=1,yref="paper",
+                fillcolor="rgba(230,192,4,0.10)",line=list(width=0),xref="x")),
+      list(list(type="rect",x0=0,x1=150,y0=0,y1=1,yref="paper",
+                fillcolor="rgba(139,69,19,0.10)",line=list(width=0),xref="x2")),
+      list(list(type="rect",x0=170,x1=320,y0=0,y1=1,yref="paper",
+                fillcolor="rgba(139,69,19,0.10)",line=list(width=0),xref="x2")),
+      list(list(type="line",x0=160,x1=160,y0=0,y1=1,yref="paper",
+                line=list(color="gray",width=1,dash="dash"),xref="x2"))
+    )
+  )
+  for (i in seq_len(nrow(sub))) {
+    r_   <- sub[i,]; col <- ssc_col(r_$SSC)
+    dstr <- format(as.Date(r_$reflectance_date),"%Y-%m-%d")
+    hov  <- paste0("SSC: ",round(r_$SSC,1)," mg/L | ",dstr," | Km ",r_$km)
+    rv   <- as.numeric(r_[band_vis])
+    fig  <- fig %>% add_trace(x=wl_vis,y=rv,xaxis="x",yaxis="y",type="scatter",
+      mode="lines+markers",line=list(color=col,width=2),
+      marker=list(size=6,color=col,line=list(width=0.5,color="white")),
+      hovertemplate=paste0(hov,"<extra></extra>"),showlegend=FALSE)
+    for (si in c(10,11)) {
+      wf <- c(64,232)[si-9]
+      fig <- fig %>% add_trace(x=wf,y=as.numeric(r_[WL_NAMES_V[si]]),
+        xaxis="x2",yaxis="y2",type="scatter",mode="markers",
+        marker=list(size=8,color=col,line=list(width=0.5,color="white")),
+        hovertemplate=paste0(WL_NAMES_V[si]," (",WL_REAL_V[si]," nm)<br>",hov,"<extra></extra>"),
+        showlegend=FALSE)
+    }
+  }
+  fig
+} else {
+  cat("⚠ Bandas espectrales no encontradas en el dataset.")
+}
+```
+
+---
+
+# 7. Hidrología — Calamar y Barranquilla {.tabset}
+
+## Series de tiempo
+
+```{r hidro_ts}
+h_r  <- hydro %>% filter(year(Fecha)>=2022)
+Qb_r <- Q_baq %>% filter(year(Fecha)>=2022)
+
+fig <- plot_ly()
+fig <- fig %>%
+  add_lines(data=h_r, x=~Fecha, y=~Q_calamar, name="Q Calamar",
+            line=list(color="#1a6b9a",width=1.5), yaxis="y") %>%
+  add_lines(data=h_r, x=~Fecha, y=~Q_sinincora, name="Q Cal − Q Incora",
+            line=list(color="red",width=2), yaxis="y") %>%
+  add_lines(data=h_r, x=~Fecha, y=~TSS_calamar, name="TSS Calamar",
+            line=list(color="#c0392b",width=1.5), yaxis="y2") %>%
+  add_lines(data=h_r, x=~Fecha, y=~ssc_derived, name="SSC Derivado",
+            line=list(color="#4bb929",width=1.5), yaxis="y3")
+
+if(nrow(Qb_r)>0)
+  fig <- fig %>% add_trace(data=Qb_r, x=~Fecha, y=~Q_barranquilla, type="scatter",
+    mode="markers+lines", name="Q Barranquilla",
+    line=list(color="#e07b2a",width=2), marker=list(size=7), yaxis="y")
+
+fig %>% layout(
+  yaxis =list(title="Caudal (m³/s)", domain=c(0.67,1), gridcolor="#e2e6ea"),
+  yaxis2=list(title="TSS (Kt/día)",  domain=c(0.34,0.65), gridcolor="#e2e6ea"),
+  yaxis3=list(title="SSC (mg/L)",    domain=c(0,0.32), gridcolor="#e2e6ea"),
+  xaxis =list(showgrid=FALSE, anchor="y3"),
+  height=620, legend=list(orientation="h",y=-0.07)
+)
+```
+
+## Estacionalidad
+
+```{r hidro_seas}
+fig <- plot_ly()
+for (m in 1:12) {
+  qv <- hydro$Q_calamar[hydro$mes==m]
+  tv <- hydro$TSS_calamar[hydro$mes==m]
+  if(length(qv)>0) fig <- fig %>% add_boxplot(y=qv, x=MESES[m], showlegend=FALSE,
+    marker=list(color="#1a6b9a",opacity=0.6), line=list(color="#1a6b9a"),
+    xaxis="x", yaxis="y", name=MESES[m])
+  if(length(tv)>0) fig <- fig %>% add_boxplot(y=tv, x=MESES[m], showlegend=FALSE,
+    marker=list(color="#c0392b",opacity=0.6), line=list(color="#c0392b"),
+    xaxis="x2", yaxis="y2", name=MESES[m])
+}
+fig %>% layout(
+  grid=list(rows=1,columns=2,pattern="independent"),
+  xaxis =list(domain=c(0,0.47),title="Mes",categoryorder="array",
+              categoryarray=MESES,showgrid=FALSE),
+  yaxis =list(title="Q Calamar (m³/s)", gridcolor="#e2e6ea"),
+  xaxis2=list(domain=c(0.53,1),title="Mes",categoryorder="array",
+              categoryarray=MESES,showgrid=FALSE),
+  yaxis2=list(title="TSS Calamar (Kt/día)", gridcolor="#e2e6ea"),
+  height=440,
+  annotations=list(
+    list(text="<b>Caudal Calamar (m³/s)</b>",x=0.23,y=1.05,xref="paper",yref="paper",showarrow=FALSE),
+    list(text="<b>TSS Calamar (Kt/día)</b>", x=0.77,y=1.05,xref="paper",yref="paper",showarrow=FALSE)
+  )
+)
+```
+
+## Q vs TSS Calamar
+
+```{r qtss}
+mg  <- hydro %>% drop_na(Q_calamar,TSS_calamar)
+cc  <- cor.test(mg$Q_calamar,mg$TSS_calamar)
+fit <- lm(TSS_calamar~Q_calamar,data=mg)
+xl  <- seq(min(mg$Q_calamar),max(mg$Q_calamar),length.out=300)
+p_t <- if(cc$p.value<0.0001)"< 0.0001" else round(cc$p.value,4)
+
+plot_ly() %>%
+  add_markers(x=mg$Q_calamar,y=mg$TSS_calamar,
+    marker=list(size=4,color="#1a6b9a",opacity=0.45),
+    hovertemplate="Q: %{x:.0f} m³/s<br>TSS: %{y:.1f} Kt/día<extra></extra>") %>%
+  add_lines(x=xl,y=coef(fit)[1]+coef(fit)[2]*xl,name="Regresión",
+    line=list(color="#c0392b",width=2,dash="dash")) %>%
+  layout(
+    title=paste0("<b>Q vs TSS Calamar</b><br><sup>y = ",round(coef(fit)[2],4),
+                 "x + ",round(coef(fit)[1],2)," | R²=",round(cc$estimate^2,3),
+                 "  p=",p_t,"  n=",nrow(mg),"</sup>"),
+    xaxis=list(title="Q Calamar (m³/s)",showgrid=FALSE),
+    yaxis=list(title="TSS Calamar (Kt/día)",gridcolor="#e2e6ea"),
+    height=460
+  )
+```
+
+## Q Calamar vs Q Barranquilla
+
+```{r qq}
+mg2 <- inner_join(Q_cal,Q_baq,by="Fecha") %>% drop_na()
+fig <- plot_ly()
+fig <- fig %>%
+  add_lines(data=Q_cal, x=~Fecha, y=~Q_calamar, name="Q Calamar",
+            line=list(color="#1a6b9a",width=1.5), xaxis="x", yaxis="y")
+if(nrow(Q_baq)>0)
+  fig <- fig %>% add_trace(data=Q_baq,x=~Fecha,y=~Q_barranquilla,type="scatter",
+    mode="markers+lines",name="Q Barranquilla",
+    line=list(color="#e07b2a",width=2),marker=list(size=7),xaxis="x",yaxis="y")
+if(nrow(mg2)>0) {
+  cc2 <- cor.test(mg2$Q_calamar,mg2$Q_barranquilla)
+  fit2<- lm(Q_barranquilla~Q_calamar,data=mg2)
+  xl2 <- seq(min(mg2$Q_calamar),max(mg2$Q_calamar),length.out=200)
+  fig <- fig %>%
+    add_markers(x=mg2$Q_calamar,y=mg2$Q_barranquilla,name="Coincidentes",
+      marker=list(size=8,color="#1a6b9a",line=list(width=1,color="white")),
+      xaxis="x2",yaxis="y2") %>%
+    add_lines(x=xl2,y=coef(fit2)[1]+coef(fit2)[2]*xl2,showlegend=FALSE,
+      line=list(color="#c0392b",width=2,dash="dash"),xaxis="x2",yaxis="y2")
+}
+fig %>% layout(
+  grid=list(rows=1,columns=2,pattern="independent"),
+  xaxis =list(domain=c(0,0.47),showgrid=FALSE,title="Fecha"),
+  yaxis =list(title="Caudal (m³/s)",gridcolor="#e2e6ea"),
+  xaxis2=list(domain=c(0.53,1),showgrid=FALSE,title="Q Calamar (m³/s)"),
+  yaxis2=list(title="Q Barranquilla (m³/s)",gridcolor="#e2e6ea"),
+  height=460,legend=list(orientation="h",y=-0.15)
+)
+```
+
+---
+
+# 8. Conclusiones
+
+<div class="info-card accent-left">
+
+**01 — Dataset final de calibración**  
+El proceso de control de calidad y selección espacial permitió consolidar entre **27 y 39 observaciones** con R² entre **0.58 y 0.73**, ubicadas en los kilómetros 0, 1, 3, 14, 17, 18 y 19 del tramo estuarino.
+
+**02 — Bandas más informativas**  
+Las bandas **Red, NIR y rojo 3** mostraron las correlaciones más altas con SSC, consistente con la física de retrodispersión de sedimentos en agua turbia.
+
+**03 — Perspectivas de modelado**  
+Con ~30 puntos el dataset es apto para **regresión potencial log-log** y **regresión lineal múltiple** con 2–3 variables, validadas mediante Leave-One-Out Cross Validation (LOOCV). De ampliarse podría aplicarse Random Forest u otros algoritmos de machine learning.
+
+**04 — Limitaciones**  
+Un modelo de este tipo busca ofrecer una alternativa ante la falta importante de datos *in situ*, pero su desarrollo está también limitado por esta misma problemática. La influencia de dragados en km 1–11 y los efectos de marea en la zona estuarina representan fuentes de incertidumbre importantes.
+
+</div>
+
+---
+
+# Referencias
+
+- Qiu, Z. et al. (2024). Four-decades of sediment transport variations in the Yellow River on the Loess Plateau using Landsat imagery. *Remote Sensing of Environment*, 306. https://doi.org/10.1016/j.rse.2024.114147
+
+- Qiu, Z. et al. (2024). Improving the observations of suspended sediment concentrations in rivers from Landsat to Sentinel-2 imagery. *International Journal of Applied Earth Observation and Geoinformation*, 134. https://doi.org/10.1016/j.jag.2024.104209
+
+- Restrepo, J.D. et al. (2006). Fluvial fluxes into the Caribbean Sea and their impact on coastal ecosystems: The Magdalena River, Colombia. *Global and Planetary Change*, 50(1–2), 33–49. https://doi.org/10.1016/j.gloplacha.2005.09.002
+
+- Yepez, S. et al. (2018). Retrieval of suspended sediment concentrations using Landsat-8 OLI satellite images in the Orinoco River. *Comptes Rendus–Géoscience*, 350(1–2), 20–30. https://doi.org/10.1016/j.crte.2017.08.004
+
+- Gray, J.R. & Simões, F.J.M. (2008). Estimating Sediment Discharge. *Sedimentation Engineering*, ASCE.
+
+- Vanoni, V.A. (Ed.) (1975). *Sedimentation Engineering*. ASCE Manual 54.
+
+---
+
+*Documento generado con R Markdown · Francisco Javier Morales Carroll · `r Sys.time()`*
