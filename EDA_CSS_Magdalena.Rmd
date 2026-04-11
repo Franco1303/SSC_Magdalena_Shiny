@@ -5,6 +5,7 @@ author: "Francisco Javier Morales Carroll · Universidad del Norte"
 date: "`r format(Sys.Date(), '%d de %B de %Y')`"
 output:
   html_document:
+    self_contained: true
     theme: flatly
     highlight: tango
     toc: true
