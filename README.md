@@ -2,11 +2,15 @@
 
 
 
-Dashboard interactivo desarrollado como parte de la tesis de pregrado en Geología
+Versión en R Shiny de mi Dashboard interactivo desarrollado como parte de la tesis de pregrado en Geología
 
 (Universidad del Norte) para el análisis exploratorio de datos de concentración de
 
 sedimentos en suspensión (CSS) en el tramo estuarino del río Magdalena, Barranquilla.
+
+
+Desde los años 80 se ha reportado el uso de reflectancia de superficie como un predictor confiable de concentración de sedimentos de cuerpos de aguas naturales.
+El exploratorio aqui contenido busca verificar la relación entre la reflectancia extraida de imagenes satelitales Sentinel-2 y SSC medido in situ en el río Magdalena.
 
 
 
@@ -14,7 +18,7 @@ sedimentos en suspensión (CSS) en el tramo estuarino del río Magdalena, Barran
 
 
 
-\- Python 3.10 o superior
+\- R, Rstudio versión mas reciente
 
 \- Git
 
@@ -28,33 +32,18 @@ sedimentos en suspensión (CSS) en el tramo estuarino del río Magdalena, Barran
 
 ```
 
-&#x20;  git clone https://github.com/TU\_USUARIO/css-magdalena-eda.git
+&#x20;  git clone https://github.com/Franco1303/SSC_Magdalena_Shiny.git
 
 &#x20;  cd css-magdalena-eda
 
 ```
 
 
-
-2\. Crea un entorno virtual (recomendado):
-
-```
-
-&#x20;  python -m venv venv
-
-&#x20;  venv\\Scripts\\activate        # Windows
-
-&#x20;  source venv/bin/activate     # Mac/Linux
+2\. Instala las dependencias:
 
 ```
 
-
-
-3\. Instala las dependencias:
-
-```
-
-&#x20;  pip install -r requirements.txt
+Ejecuta el Script "dependencias.R" en RStudio
 
 ```
 
@@ -64,21 +53,23 @@ sedimentos en suspensión (CSS) en el tramo estuarino del río Magdalena, Barran
 
 ```
 
-&#x20;  python app.py
+&#x20;  Ejecutar ui.R
 
 ```
 
 
 
-5\. Abre tu navegador en: http://127.0.0.1:8050
+5\. Rstudio abrira una ventana con el Dashborad interactivo
 
 
 
 \## Estructura del proyecto
 
+\- `ui.R` — aplicación principal, contiene todos los elementos de la interfas
 
+\- `server.R` — Contiene la logica de las graficas interactivas.
 
-\- `app.py` — aplicación principal Dash
+\- `global.R` — Carga datos y dependencias. 
 
 \- `puntos\_finales2.csv` — dataset final de calibración (reflectancia + CSS)
 
