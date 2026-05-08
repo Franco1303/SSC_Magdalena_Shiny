@@ -4,7 +4,7 @@
 # ─────────────────────────────────────────
 
 server <- function(input, output, session) {
-
+  
   # ═══════════════════════════════════════
   # DATASET FILTRADO
   # ═══════════════════════════════════════
@@ -12,11 +12,11 @@ server <- function(input, output, session) {
     req(input$km_filter)
     df %>% filter(km %in% input$km_filter)
   })
-
+  
   output$km_filter_count <- renderText({
     paste0(nrow(dff())," observaciones · ",length(input$km_filter)," estación(es)")
   })
-
+  
   # ═══════════════════════════════════════
   # CONTEXTO
   # ═══════════════════════════════════════
@@ -36,7 +36,7 @@ server <- function(input, output, session) {
                          center=list(lat=11.05,lon=-74.82),zoom=11.5),
              margin=list(l=0,r=0,t=0,b=0),paper_bgcolor=COLOR_CARD)
   })
-
+  
   output$map_calamar <- renderPlotly({
     plot_ly(lat=c(10.2422934,10.30),lon=c(-74.9138168,-74.95),
             type="scattermapbox",mode="markers",
@@ -46,32 +46,32 @@ server <- function(input, output, session) {
                          center=list(lat=10.2422934,lon=-74.9138168),zoom=9),
              margin=list(l=0,r=0,t=0,b=0),paper_bgcolor=COLOR_CARD)
   })
-
+  
   output$km_badges <- renderUI({
     div(style="display:flex;gap:12px;flex-wrap:wrap;",
-      lapply(sort(unique(df$km)), function(k) {
-        col <- km_color(k)
-        div(style=paste0(
-          "background:",COLOR_CARD,";border-radius:10px;padding:16px 24px;",
-          "box-shadow:0 1px 4px rgba(0,0,0,0.07);border:1px solid ",COLOR_BORDER,
-          ";border-top:3px solid ",col,";"),
-          div(paste0("Km ",k), style=paste0("font-weight:700;color:",col,";font-size:16px;")),
-          div(paste0(nrow(df[df$km==k,])," obs."),
-              style=paste0("font-size:13px;color:",COLOR_MUTED,";"))
-        )
-      })
+        lapply(sort(unique(df$km)), function(k) {
+          col <- km_color(k)
+          div(style=paste0(
+            "background:",COLOR_CARD,";border-radius:10px;padding:16px 24px;",
+            "box-shadow:0 1px 4px rgba(0,0,0,0.07);border:1px solid ",COLOR_BORDER,
+            ";border-top:3px solid ",col,";"),
+            div(paste0("Km ",k), style=paste0("font-weight:700;color:",col,";font-size:16px;")),
+            div(paste0(nrow(df[df$km==k,])," obs."),
+                style=paste0("font-size:13px;color:",COLOR_MUTED,";"))
+          )
+        })
     )
   })
-
+  
   # ═══════════════════════════════════════
   # MARCO — Bands visualizer
   # ═══════════════════════════════════════
   selected_band <- reactiveVal(NULL)
-
+  
   output$bands_viz <- renderUI({
     MIN_NM <- 400; MAX_NM <- 2400
     nm_pct <- function(nm) (nm - MIN_NM) / (MAX_NM - MIN_NM) * 100
-
+    
     bars <- lapply(seq_along(BANDS_S2), function(i) {
       b    <- BANDS_S2[[i]]
       left <- nm_pct(b$lambda - 10)
@@ -86,22 +86,22 @@ server <- function(input, output, session) {
             style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:9px;color:#6b7280;white-space:nowrap;")
       )
     })
-
+    
     tagList(
       div(style="position:relative;width:100%;height:160px;",
-        div(style="position:absolute;top:0;left:0;width:100%;height:100%;", bars),
-        div(style="position:absolute;bottom:0;left:0;width:100%;height:20px;",
-          lapply(c(400,600,800,1000,1400,1800,2200), function(nm)
-            tags$span(as.character(nm), style=paste0(
-              "position:absolute;left:",(nm-400)/2000*100,"%;",
-              "transform:translateX(-50%);font-size:10px;color:",COLOR_MUTED,";"
-            ))
+          div(style="position:absolute;top:0;left:0;width:100%;height:100%;", bars),
+          div(style="position:absolute;bottom:0;left:0;width:100%;height:20px;",
+              lapply(c(400,600,800,1000,1400,1800,2200), function(nm)
+                tags$span(as.character(nm), style=paste0(
+                  "position:absolute;left:",(nm-400)/2000*100,"%;",
+                  "transform:translateX(-50%);font-size:10px;color:",COLOR_MUTED,";"
+                ))
+              )
           )
-        )
       )
     )
   })
-
+  
   output$band_info_ui <- renderUI({
     idx <- input$selected_band_idx
     if (is.null(idx)) {
@@ -117,33 +117,33 @@ server <- function(input, output, session) {
     rc <- res_colors[[b$res]]
     div(style=paste0("background:",COLOR_BG,";border-radius:8px;padding:14px 18px;",
                      "margin-top:12px;border:0.5px solid ",COLOR_BORDER,";min-height:70px;"),
-      div(style="display:flex;align-items:center;gap:10px;margin-bottom:8px;",
-        div(style=paste0("width:12px;height:12px;border-radius:3px;background:",b$color,";flex-shrink:0;")),
-        tags$span(b$name, style=paste0("font-size:14px;font-weight:600;color:",COLOR_TEXT,";")),
-        tags$span(b$res, style=paste0("font-size:11px;font-weight:500;padding:2px 8px;border-radius:6px;",
-                                      "background:",rc$bg,";color:",rc$col,";")),
-        tags$span(paste0("λ = ",b$lambda," nm"),
-                  style=paste0("font-size:12px;color:",COLOR_MUTED,";margin-left:auto;"))
-      ),
-      tags$p(b$desc, style=paste0("font-size:13px;color:",COLOR_MUTED,";margin:0;line-height:1.6;"))
+        div(style="display:flex;align-items:center;gap:10px;margin-bottom:8px;",
+            div(style=paste0("width:12px;height:12px;border-radius:3px;background:",b$color,";flex-shrink:0;")),
+            tags$span(b$name, style=paste0("font-size:14px;font-weight:600;color:",COLOR_TEXT,";")),
+            tags$span(b$res, style=paste0("font-size:11px;font-weight:500;padding:2px 8px;border-radius:6px;",
+                                          "background:",rc$bg,";color:",rc$col,";")),
+            tags$span(paste0("λ = ",b$lambda," nm"),
+                      style=paste0("font-size:12px;color:",COLOR_MUTED,";margin-left:auto;"))
+        ),
+        tags$p(b$desc, style=paste0("font-size:13px;color:",COLOR_MUTED,";margin:0;line-height:1.6;"))
     )
   })
-
+  
   # ── Fórmulas navegables ──
   formula_idx <- reactiveVal(1)
-
+  
   observeEvent(input$formula_prev, {
     formula_idx(max(1, formula_idx()-1))
   })
   observeEvent(input$formula_next, {
     formula_idx(min(length(FORMULAS), formula_idx()+1))
   })
-
+  
   output$formula_tag <- renderUI({
     f <- FORMULAS[[formula_idx()]]
     tags$span(f$tag, style="font-size:11px;font-weight:500;padding:3px 10px;border-radius:6px;background:#E6F1FB;color:#0C447C;")
   })
-
+  
   output$formula_content <- renderUI({
     f <- FORMULAS[[formula_idx()]]
     tagList(
@@ -153,25 +153,25 @@ server <- function(input, output, session) {
       tags$p(f$desc,  style=paste0("font-size:13px;color:",COLOR_MUTED,";margin:0;line-height:1.7;"))
     )
   })
-
+  
   output$formula_counter <- renderText({
     paste0(formula_idx()," / ",length(FORMULAS))
   })
-
+  
   # ═══════════════════════════════════════
   # EDA — Estadísticas
   # ═══════════════════════════════════════
   stats_group <- reactiveVal("bandas")
-
+  
   observeEvent(input$pill_bandas,  stats_group("bandas"))
   observeEvent(input$pill_indices, stats_group("indices"))
   observeEvent(input$pill_ssc,     stats_group("ssc"))
-
+  
   observe({
     vars <- switch(stats_group(), bandas=BANDAS, indices=INDICES, ssc=SSCS)
     updateSelectInput(session,"stats_var", choices=vars, selected=vars[1])
   })
-
+  
   output$stats_table <- DT::renderDataTable({
     d   <- dff(); var <- input$stats_var
     req(var %in% names(d))
@@ -188,7 +188,7 @@ server <- function(input, output, session) {
       DT::datatable(options=list(dom='t',paging=FALSE,ordering=FALSE),
                     rownames=FALSE, class="compact")
   })
-
+  
   # ═══════════════════════════════════════
   # EDA — Perfiles
   # ═══════════════════════════════════════
@@ -301,12 +301,12 @@ server <- function(input, output, session) {
     kms <- sort(unique(d$km))
     fig <- plot_ly()
     for (k in kms) {
-      sub <- d %>% filter(km==k); col <- km_color(k)
+      sub <- d %>% filter(km==k)
       fig <- fig %>%
-        add_histogram(x=sub[[var]],name=paste0("Km ",k),marker=list(color=col,opacity=0.75),
+        add_histogram(x=sub[[var]],name=paste0("Km ",k),marker=list(color=COLOR_ACCENT,opacity=0.75),
                       xaxis="x",yaxis="y",legendgroup=paste0("km",k)) %>%
-        add_boxplot(y=sub[[var]],name=paste0("Km ",k),marker=list(color=col),
-                    line=list(color=col),boxmean=TRUE,showlegend=FALSE,
+        add_boxplot(y=sub[[var]],name=paste0("Km ",k),marker=list(color=COLOR_ACCENT),
+                    line=list(color=COLOR_ACCENT),boxmean=TRUE,showlegend=FALSE,
                     xaxis="x2",yaxis="y2",legendgroup=paste0("km",k))
     }
     fig %>% layout(barmode="overlay",
@@ -324,7 +324,7 @@ server <- function(input, output, session) {
                      list(text="Boxplot por Km",x=0.76,y=1.05,xref="paper",yref="paper",showarrow=FALSE)
                    ))
   })
-
+  
   # ═══════════════════════════════════════
   # EDA — Series de tiempo
   # ═══════════════════════════════════════
@@ -334,7 +334,7 @@ server <- function(input, output, session) {
     for (k in sort(unique(d$km))) {
       sub <- d %>% filter(km==k) %>% arrange(reflectance_date); col <- km_color(k)
       fig <- fig %>% add_trace(x=sub$reflectance_date,y=sub[[var]],type="scatter",mode="lines+markers",
-                                name=paste0("Km ",k),line=list(color=col,width=2),marker=list(size=7,color=col))
+                               name=paste0("Km ",k),line=list(color=col,width=2),marker=list(size=7,color=col))
     }
     fig %>% layout(xaxis=list(title="Fecha",showgrid=FALSE),
                    yaxis=list(title=var,gridcolor=COLOR_BORDER),
@@ -342,7 +342,7 @@ server <- function(input, output, session) {
                    font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
                    legend=list(orientation="h",y=-0.2),margin=list(l=50,r=20,t=20,b=60))
   })
-
+  
   # ═══════════════════════════════════════
   # EDA — Scatter (lineal y potencial)
   # ═══════════════════════════════════════
@@ -351,7 +351,7 @@ server <- function(input, output, session) {
     req(xvar %in% names(d), yvar %in% names(d))
     x <- d[[xvar]]; y_raw <- d[[yvar]]
     y <- if (input$scatter_transform=="log") log(y_raw) else y_raw
-
+    
     if (input$scatter_ajuste=="lineal") {
       cc  <- cor.test(x,y); r2 <- cc$estimate^2; p <- cc$p.value
       fit <- lm(y~x); xl <- seq(min(x,na.rm=T),max(x,na.rm=T),length.out=200)
@@ -372,7 +372,7 @@ server <- function(input, output, session) {
            xl=xl,yl=yl,r2=r2,p=p,eq=eq)
     }
   })
-
+  
   output$scatter_plot <- renderPlotly({
     res  <- scatter_results(); d <- dff()
     xvar <- input$scatter_x;   yvar <- input$scatter_y
@@ -384,16 +384,16 @@ server <- function(input, output, session) {
         y_sub <- if(input$scatter_transform=="log") log(sub[[yvar]]) else sub[[yvar]]
         col   <- km_color(k)
         fig   <- fig %>% add_markers(x=sub[[xvar]],y=y_sub,name=paste0("Km ",k),
-                                      marker=list(size=9,color=col,line=list(width=1,color="white")))
+                                     marker=list(size=9,color=col,line=list(width=1,color="white")))
       }
     } else if (input$scatter_color=="CSS") {
       fig <- fig %>% add_markers(x=d[[xvar]],y=res$y,name="Datos",
-                                  marker=list(size=9,color=d[[yvar]],colorscale="Inferno",
-                                              showscale=TRUE,colorbar=list(title="CSS"),
-                                              line=list(width=1,color="white")))
+                                 marker=list(size=9,color=d[[yvar]],colorscale="Inferno",
+                                             showscale=TRUE,colorbar=list(title="CSS"),
+                                             line=list(width=1,color="white")))
     } else {
       fig <- fig %>% add_markers(x=res$x,y=res$y,name="Datos",
-                                  marker=list(size=9,color=COLOR_ACCENT,line=list(width=1,color="white")))
+                                 marker=list(size=9,color=COLOR_ACCENT,line=list(width=1,color="white")))
     }
     fig %>%
       add_lines(x=res$xl,y=res$yl,name="Regresión",
@@ -404,22 +404,22 @@ server <- function(input, output, session) {
              font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
              legend=list(orientation="h",y=-0.2),margin=list(l=50,r=20,t=20,b=60))
   })
-
+  
   output$scatter_stats_ui <- renderUI({
     res <- scatter_results(); d <- dff()
     p_text <- if(res$p<0.0001) "< 0.0001" else round(res$p,4)
     mk <- function(txt,col=COLOR_TEXT,bold=FALSE)
       tags$span(txt,style=paste0("font-family:monospace;font-size:13px;color:",col,";",
-                                  if(bold)"font-weight:700;" else "",
-                                  "background:",COLOR_ACCENT,"18;padding:4px 10px;border-radius:4px;"))
+                                 if(bold)"font-weight:700;" else "",
+                                 "background:",COLOR_ACCENT,"18;padding:4px 10px;border-radius:4px;"))
     div(style="display:flex;gap:24px;flex-wrap:wrap;margin-top:8px;",
-      mk(res$eq), mk(paste0("R² = ",round(res$r2,3)),COLOR_ACCENT,TRUE),
-      mk(paste0("p = ",p_text)),
-      tags$span(paste0("n = ",nrow(d)),
-        style=paste0("font-family:monospace;font-size:13px;color:",COLOR_MUTED,
-                     ";background:",COLOR_BORDER,";padding:4px 10px;border-radius:4px;")))
+        mk(res$eq), mk(paste0("R² = ",round(res$r2,3)),COLOR_ACCENT,TRUE),
+        mk(paste0("p = ",p_text)),
+        tags$span(paste0("n = ",nrow(d)),
+                  style=paste0("font-family:monospace;font-size:13px;color:",COLOR_MUTED,
+                               ";background:",COLOR_BORDER,";padding:4px 10px;border-radius:4px;")))
   })
-
+  
   # ═══════════════════════════════════════
   # EDA — Ranking correlaciones
   # ═══════════════════════════════════════
@@ -458,16 +458,16 @@ server <- function(input, output, session) {
              font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
              margin=list(l=80,r=140,t=30,b=50),showlegend=FALSE)
   })
-
+  
   # ═══════════════════════════════════════
   # EDA — Firmas espectrales
   # ═══════════════════════════════════════
   observe({
     d <- dff(); kms <- sort(unique(d$km))
     updateSelectInput(session,"spec_km",
-      choices=c("Todas"="all",setNames(kms,paste0("Km ",kms))), selected="all")
+                      choices=c("Todas"="all",setNames(kms,paste0("Km ",kms))), selected="all")
   })
-
+  
   output$spec_plot <- renderPlotly({
     d   <- dff()
     sub <- if(input$spec_km=="all") d else d %>% filter(km==as.integer(input$spec_km))
@@ -508,22 +508,22 @@ server <- function(input, output, session) {
       hover <- paste0("SSC: ",round(row$SSC,1)," mg/L<br>Fecha: ",dstr,"<br>Km: ",row$km)
       rv    <- as.numeric(row[band_vis])
       fig   <- fig %>% add_trace(x=wl_vis,y=rv,xaxis="x",yaxis="y",type="scatter",mode="lines+markers",
-                                  line=list(color=col,width=2),
-                                  marker=list(size=7,color=col,line=list(width=0.5,color="white")),
-                                  hovertemplate=paste0(hover,"<extra></extra>"),showlegend=FALSE)
+                                 line=list(color=col,width=2),
+                                 marker=list(size=7,color=col,line=list(width=0.5,color="white")),
+                                 hovertemplate=paste0(hover,"<extra></extra>"),showlegend=FALSE)
       for (si in 10:11) {
         wf <- to_fict(WL_REAL[si])
         if (!is.na(wf))
           fig <- fig %>% add_trace(x=wf,y=as.numeric(row[WL_NAMES[si]]),xaxis="x2",yaxis="y2",
-                                    type="scatter",mode="markers",
-                                    marker=list(size=9,color=col,line=list(width=0.5,color="white")),
-                                    hovertemplate=paste0(WL_NAMES[si]," (",WL_REAL[si]," nm)<br>",hover,"<extra></extra>"),
-                                    showlegend=FALSE)
+                                   type="scatter",mode="markers",
+                                   marker=list(size=9,color=col,line=list(width=0.5,color="white")),
+                                   hovertemplate=paste0(WL_NAMES[si]," (",WL_REAL[si]," nm)<br>",hover,"<extra></extra>"),
+                                   showlegend=FALSE)
       }
     }
     fig
   })
-
+  
   # ═══════════════════════════════════════
   # EDA — Hidrología
   # ═══════════════════════════════════════
@@ -537,27 +537,27 @@ server <- function(input, output, session) {
       mer = df_hydro%>% filter(Fecha>=d0,Fecha<=d1)
     )
   })
-
+  
   output$hydro_ts_plot <- renderPlotly({
     h <- hf(); mer <- h$mer %>% drop_na(Q_calamar,TSS_calamar)
     fig <- plot_ly()
     if(nrow(h$Q)>0)
       fig <- fig %>% add_lines(data=h$Q,x=~Fecha,y=~Q_calamar,name="Q Calamar",
-                                line=list(color=COLOR_ACCENT,width=1.5),yaxis="y")
+                               line=list(color=COLOR_ACCENT,width=1.5),yaxis="y")
     if(nrow(h$Qbq)>0) {
       fig <- fig %>%
         add_trace(data=h$Qbq,x=~Fecha,y=~Q_barranquilla,type="scatter",mode="markers+lines",
                   name="Q Barranquilla",line=list(color="#e07b2a",width=2),marker=list(size=7),yaxis="y")
       if(nrow(mer)>0)
         fig <- fig %>% add_lines(data=mer,x=~Fecha,y=~Q_sinincora,name="Q Cal - Q Incora",
-                                  line=list(color="red",width=2.5),yaxis="y")
+                                 line=list(color="red",width=2.5),yaxis="y")
     }
     if(nrow(h$TSS)>0)
       fig <- fig %>% add_lines(data=h$TSS,x=~Fecha,y=~TSS_calamar,name="TSS Calamar",
-                                line=list(color="#c0392b",width=1.5),yaxis="y2")
+                               line=list(color="#c0392b",width=1.5),yaxis="y2")
     if(nrow(mer)>0)
       fig <- fig %>% add_lines(data=mer,x=~Fecha,y=~ssc_derived,name="SSC Derivado",
-                                line=list(color="#4bb929",width=1.5),yaxis="y3")
+                               line=list(color="#4bb929",width=1.5),yaxis="y3")
     fig %>% layout(
       yaxis =list(title="Caudal (m³/s)",domain=c(0.67,1),showgrid=TRUE,gridcolor=COLOR_BORDER),
       yaxis2=list(title="TSS (Kt/día)",domain=c(0.34,0.65),showgrid=TRUE,gridcolor=COLOR_BORDER),
@@ -569,7 +569,7 @@ server <- function(input, output, session) {
       margin=list(l=60,r=20,t=40,b=50)
     )
   })
-
+  
   output$hydro_ts_stats <- renderUI({
     h <- hf(); mer <- h$mer %>% drop_na(Q_calamar,TSS_calamar)
     items <- list(
@@ -579,21 +579,21 @@ server <- function(input, output, session) {
       list("SSC Derivado", if(nrow(mer)>0)  mer$ssc_derived   else numeric(0),"mg/L")
     )
     div(style="margin-top:16px;",
-      lapply(items, function(x) {
-        if(length(x[[2]])==0 || all(is.na(x[[2]]))) return(NULL)
-        div(style=paste0("background:",COLOR_CARD,";border-radius:10px;padding:12px 20px;",
-                         "box-shadow:0 1px 4px rgba(0,0,0,0.07);border:1px solid ",COLOR_BORDER,";margin-bottom:8px;"),
-          div(x[[1]],style=paste0("font-size:11px;color:",COLOR_MUTED,";text-transform:uppercase;")),
-          div(style="display:flex;gap:16px;margin-top:4px;",
-            tags$span(paste0("Media: ",round(mean(x[[2]],na.rm=T),1)," ",x[[3]]),style=paste0("font-size:13px;color:",COLOR_TEXT,";")),
-            tags$span(paste0("Mín: ",round(min(x[[2]],na.rm=T),1)),style=paste0("font-size:13px;color:",COLOR_MUTED,";")),
-            tags$span(paste0("Máx: ",round(max(x[[2]],na.rm=T),1)),style=paste0("font-size:13px;color:",COLOR_MUTED,";"))
+        lapply(items, function(x) {
+          if(length(x[[2]])==0 || all(is.na(x[[2]]))) return(NULL)
+          div(style=paste0("background:",COLOR_CARD,";border-radius:10px;padding:12px 20px;",
+                           "box-shadow:0 1px 4px rgba(0,0,0,0.07);border:1px solid ",COLOR_BORDER,";margin-bottom:8px;"),
+              div(x[[1]],style=paste0("font-size:11px;color:",COLOR_MUTED,";text-transform:uppercase;")),
+              div(style="display:flex;gap:16px;margin-top:4px;",
+                  tags$span(paste0("Media: ",round(mean(x[[2]],na.rm=T),1)," ",x[[3]]),style=paste0("font-size:13px;color:",COLOR_TEXT,";")),
+                  tags$span(paste0("Mín: ",round(min(x[[2]],na.rm=T),1)),style=paste0("font-size:13px;color:",COLOR_MUTED,";")),
+                  tags$span(paste0("Máx: ",round(max(x[[2]],na.rm=T),1)),style=paste0("font-size:13px;color:",COLOR_MUTED,";"))
+              )
           )
-        )
-      })
+        })
     )
   })
-
+  
   output$hydro_seas_plot <- renderPlotly({
     h <- hf()
     req(nrow(h$Q)>0 || nrow(h$TSS)>0)
@@ -603,9 +603,9 @@ server <- function(input, output, session) {
     for (m in 1:12) {
       qv <- Qm$Q_calamar[Qm$mes==m]; tv <- Tm$TSS_calamar[Tm$mes==m]
       if(length(qv)>0) fig <- fig %>% add_boxplot(y=qv,x=MESES[m],showlegend=FALSE,
-        marker=list(color=COLOR_ACCENT,opacity=0.6),line=list(color=COLOR_ACCENT),xaxis="x",yaxis="y")
+                                                  marker=list(color=COLOR_ACCENT,opacity=0.6),line=list(color=COLOR_ACCENT),xaxis="x",yaxis="y")
       if(length(tv)>0) fig <- fig %>% add_boxplot(y=tv,x=MESES[m],showlegend=FALSE,
-        marker=list(color="#c0392b",opacity=0.6),line=list(color="#c0392b"),xaxis="x2",yaxis="y2")
+                                                  marker=list(color="#c0392b",opacity=0.6),line=list(color="#c0392b"),xaxis="x2",yaxis="y2")
     }
     fig %>% layout(
       grid=list(rows=1,columns=2,pattern="independent"),
@@ -618,7 +618,7 @@ server <- function(input, output, session) {
       margin=list(l=60,r=20,t=40,b=60)
     )
   })
-
+  
   output$hydro_qtss_plot <- renderPlotly({
     mg <- hf()$mer %>% drop_na(Q_calamar,TSS_calamar); req(nrow(mg)>0)
     x <- mg$Q_calamar; y <- mg$TSS_calamar
@@ -635,10 +635,10 @@ server <- function(input, output, session) {
              font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
              margin=list(l=60,r=20,t=20,b=50),
              annotations=list(list(text=paste0("R²=",round(r2,3),"  n=",nrow(mg)),
-               x=0.95,y=0.05,xref="paper",yref="paper",showarrow=FALSE,
-               font=list(size=12,color=COLOR_ACCENT))))
+                                   x=0.95,y=0.05,xref="paper",yref="paper",showarrow=FALSE,
+                                   font=list(size=12,color=COLOR_ACCENT))))
   })
-
+  
   output$hydro_qtss_stats <- renderUI({
     mg <- hf()$mer %>% drop_na(Q_calamar,TSS_calamar); req(nrow(mg)>0)
     cc <- cor.test(mg$Q_calamar,mg$TSS_calamar)
@@ -647,25 +647,25 @@ server <- function(input, output, session) {
     p_text <- if(p<0.0001)"< 0.0001" else round(p,4)
     mk <- function(txt,col=COLOR_TEXT,bold=FALSE)
       tags$span(txt,style=paste0("font-family:monospace;font-size:13px;color:",col,";",
-                                  if(bold)"font-weight:700;",
-                                  "background:",COLOR_ACCENT,"18;padding:4px 10px;border-radius:4px;"))
+                                 if(bold)"font-weight:700;",
+                                 "background:",COLOR_ACCENT,"18;padding:4px 10px;border-radius:4px;"))
     div(style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;",
-      mk(paste0("y = ",round(coef(fit)[2],4),"x + ",round(coef(fit)[1],2))),
-      mk(paste0("R² = ",round(r2,3)),COLOR_ACCENT,TRUE),
-      mk(paste0("p = ",p_text)),
-      tags$span(paste0("n = ",nrow(mg)),style=paste0("font-family:monospace;font-size:13px;color:",COLOR_MUTED,
-        ";background:",COLOR_BORDER,";padding:4px 10px;border-radius:4px;")))
+        mk(paste0("y = ",round(coef(fit)[2],4),"x + ",round(coef(fit)[1],2))),
+        mk(paste0("R² = ",round(r2,3)),COLOR_ACCENT,TRUE),
+        mk(paste0("p = ",p_text)),
+        tags$span(paste0("n = ",nrow(mg)),style=paste0("font-family:monospace;font-size:13px;color:",COLOR_MUTED,
+                                                       ";background:",COLOR_BORDER,";padding:4px 10px;border-radius:4px;")))
   })
-
+  
   output$hydro_qq_plot <- renderPlotly({
     h <- hf(); Qf <- h$Q; QGf <- h$Qbq
     mg <- inner_join(Qf,QGf,by="Fecha") %>% drop_na()
     fig <- plot_ly()
     if(nrow(Qf)>0)  fig <- fig %>% add_lines(data=Qf,x=~Fecha,y=~Q_calamar,name="Q Calamar",
-                                               line=list(color=COLOR_ACCENT,width=1.5),xaxis="x",yaxis="y")
+                                             line=list(color=COLOR_ACCENT,width=1.5),xaxis="x",yaxis="y")
     if(nrow(QGf)>0) fig <- fig %>% add_trace(data=QGf,x=~Fecha,y=~Q_barranquilla,type="scatter",
-                                               mode="markers+lines",name="Q Barranquilla",
-                                               line=list(color="#e07b2a",width=2),marker=list(size=7),xaxis="x",yaxis="y")
+                                             mode="markers+lines",name="Q Barranquilla",
+                                             line=list(color="#e07b2a",width=2),marker=list(size=7),xaxis="x",yaxis="y")
     if(nrow(mg)>0) {
       cc <- cor.test(mg$Q_calamar,mg$Q_barranquilla)
       fit<- lm(Q_barranquilla~Q_calamar,data=mg)
@@ -688,16 +688,16 @@ server <- function(input, output, session) {
       legend=list(orientation="h",y=-0.12),margin=list(l=60,r=20,t=40,b=70)
     )
   })
-
+  
   output$hydro_qincora_plot <- renderPlotly({
     h <- hf(); mer <- h$mer %>% drop_na(Q_calamar,Q_sinincora)
     fig <- plot_ly()
     if(nrow(h$Q)>0)
       fig <- fig %>% add_lines(data=h$Q,x=~Fecha,y=~Q_calamar,name="Q Calamar",
-                                line=list(color=COLOR_ACCENT,width=1.5))
+                               line=list(color=COLOR_ACCENT,width=1.5))
     if(nrow(mer)>0)
       fig <- fig %>% add_lines(data=mer,x=~Fecha,y=~Q_sinincora,name="Q Cal − Q Incora",
-                                line=list(color="red",width=2))
+                               line=list(color="red",width=2))
     fig %>% layout(
       xaxis=list(showgrid=FALSE,title="Fecha"),
       yaxis=list(title="Caudal (m³/s)",gridcolor=COLOR_BORDER),
@@ -706,16 +706,16 @@ server <- function(input, output, session) {
       legend=list(orientation="h",y=-0.1),margin=list(l=60,r=20,t=20,b=60)
     )
   })
-
+  
   output$hydro_tss_plot <- renderPlotly({
     h <- hf()
     fig <- plot_ly()
     if(nrow(h$TSS)>0)
       fig <- fig %>% add_lines(data=h$TSS,x=~Fecha,y=~TSS_calamar,name="TSS Calamar",
-                                line=list(color=COLOR_ACCENT,width=1.5))
+                               line=list(color=COLOR_ACCENT,width=1.5))
     if(nrow(df_tss_baq)>0)
       fig <- fig %>% add_markers(data=df_tss_baq,x=~Fecha,y=~TSS_barranquilla,name="TSS Km19 (est.)",
-                                  marker=list(size=9,color="#e07b2a",line=list(width=1,color="white")))
+                                 marker=list(size=9,color="#e07b2a",line=list(width=1,color="white")))
     fig %>% layout(
       xaxis=list(showgrid=FALSE,title="Fecha"),
       yaxis=list(title="TSS (Kt/día)",gridcolor=COLOR_BORDER),
@@ -724,14 +724,14 @@ server <- function(input, output, session) {
       legend=list(orientation="h",y=-0.1),margin=list(l=60,r=20,t=20,b=60)
     )
   })
-
+  
   output$hydro_tss_note <- renderUI({
     div("⚠ El TSS de Barranquilla es una estimación puntual basada en CSS superficial del Km 19 y
       el caudal de Barranquilla. Solo coincide con fechas de campañas que tienen imagen Sentinel-2.",
-      style=paste0("font-size:12px;color:",COLOR_MUTED,";font-style:italic;margin-top:8px;",
-                   "padding:8px 16px;background-color:",COLOR_ACCENT,"08;border-radius:6px;"))
+        style=paste0("font-size:12px;color:",COLOR_MUTED,";font-style:italic;margin-top:8px;",
+                     "padding:8px 16px;background-color:",COLOR_ACCENT,"08;border-radius:6px;"))
   })
-
+  
   # ═══════════════════════════════════════
   # EDA — Correlación (heatmap)
   # ═══════════════════════════════════════
@@ -747,7 +747,7 @@ server <- function(input, output, session) {
              font=list(family="'Lato',sans-serif",size=11,color=COLOR_TEXT),
              margin=list(l=80,r=20,t=20,b=80))
   })
-
+  
   # ═══════════════════════════════════════
   # EDA — Mapa de calor
   # ═══════════════════════════════════════
@@ -774,7 +774,7 @@ server <- function(input, output, session) {
              font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
              margin=list(l=80,r=60,t=20,b=80))
   })
-
+  
   # ═══════════════════════════════════════
   # EDA — Climatograma
   # ═══════════════════════════════════════
@@ -785,19 +785,19 @@ server <- function(input, output, session) {
     for (m in 1:12) {
       sub <- d %>% filter(mes==m); if(nrow(sub)==0) next
       fig <- fig %>% add_boxplot(y=sub$SSC,x=rep(MESES[m],nrow(sub)),showlegend=FALSE,
-        marker=list(color=COLOR_ACCENT,opacity=0.4,size=5),line=list(color=COLOR_ACCENT),
-        boxmean=TRUE,hoverinfo="skip")
+                                 marker=list(color=COLOR_ACCENT,opacity=0.4,size=5),line=list(color=COLOR_ACCENT),
+                                 boxmean=TRUE,hoverinfo="skip")
     }
     for (k in sort(unique(d$km))) {
       sub <- d %>% filter(km==k); col <- km_color(k)
       fig <- fig %>% add_markers(x=MESES[sub$mes],y=sub$SSC,name=paste0("Km ",k),
-        marker=list(size=8,color=col,line=list(width=1,color="white"),opacity=0.85),
-        hovertemplate=paste0("Km ",k,"<br>Mes: %{x}<br>CSS: %{y:.1f} mg/L<extra></extra>"))
+                                 marker=list(size=8,color=col,line=list(width=1,color="white"),opacity=0.85),
+                                 hovertemplate=paste0("Km ",k,"<br>Mes: %{x}<br>CSS: %{y:.1f} mg/L<extra></extra>"))
     }
     means <- d %>% group_by(mes) %>% summarise(m=mean(SSC,na.rm=T),.groups="drop")
     fig <- fig %>% add_trace(x=MESES[means$mes],y=means$m,type="scatter",mode="lines+markers",
-      name="Media mensual",line=list(color=COLOR_TEXT,width=2,dash="dash"),
-      marker=list(size=7,color=COLOR_TEXT))
+                             name="Media mensual",line=list(color=COLOR_TEXT,width=2,dash="dash"),
+                             marker=list(size=7,color=COLOR_TEXT))
     fig %>% layout(
       xaxis=list(title="Mes",categoryorder="array",categoryarray=MESES,showgrid=FALSE),
       yaxis=list(title="CSS (mg/L)",gridcolor=COLOR_BORDER),
@@ -807,4 +807,674 @@ server <- function(input, output, session) {
       boxmode="overlay"
     )
   })
+  
+  # ═══════════════════════════════════════
+  # HELPERS
+  # ═══════════════════════════════════════
+  `%||%` <- function(a,b) if (!is.null(a) && length(a)>0) a else b
+  
+  # Obtener key segura del modelo (siempre devuelve una key válida)
+  sel_mdl <- reactive({
+    v <- input$model_selector %||% "lineal"
+    if (!v %in% names(MODEL_LABELS)) "lineal" else v
+  })
+  
+  # Obtener resultado del modelo seleccionado desde pkl
+  model_res <- reactive({
+    req(PKL_OK)
+    mdl <- sel_mdl()
+    tryCatch({
+      # reticulate puede devolver dict Python; convertir a lista R si hace falta
+      res_list <- PKL_RESULTS[["results"]]
+      if (is.null(res_list)) return(NULL)
+      r <- res_list[[mdl]]
+      if (is.null(r)) {
+        # Intentar con py_to_r por si es objeto Python puro
+        r <- tryCatch(reticulate::py_to_r(res_list)[[mdl]], error=function(e) NULL)
+      }
+      r
+    }, error=function(e) NULL)
+  })
+  
+  # Helper: extraer vector numérico de lista Python/R
+  get_vec <- function(x) tryCatch(as.numeric(unlist(x)), error=function(e) numeric(0))
+  
+  # Color del modelo seleccionado
+  sel_col <- reactive({
+    v <- MODEL_COLS[sel_mdl()]
+    if (is.na(v) || length(v)==0) COLOR_ACCENT else unname(v)
+  })
+  
+  # ═══════════════════════════════════════
+  # MODELO
+  # ═══════════════════════════════════════
+  output$model_header_chips <- renderUI({
+    # Usa df_calib si existe, si no usa df (dataset principal)
+    d_ref <- if (is.data.frame(df_calib) && nrow(df_calib)>0) df_calib else df
+    n   <- nrow(d_ref)
+    rng <- paste0(floor(min(d_ref$SSC,na.rm=TRUE)),"–",
+                  ceiling(max(d_ref$SSC,na.rm=TRUE))," mg/L")
+    div(style="display:flex;gap:12px;flex-wrap:wrap;",
+        metric_chip_ui("Dataset (n)", as.character(n), COLOR_ACCENT),
+        metric_chip_ui("Variable predictora", "NIR (sr\u207b\u00b9)", ACCENT2),
+        metric_chip_ui("Rango SSC", rng, ACCENT3))
+  })
+  
+  output$model_eq_box <- renderUI({
+    if (!PKL_OK) return(div("Sin modelos — ejecuta train_models.py primero",
+                            style=paste0("color:",COLOR_MUTED,";font-size:13px;")))
+    res <- model_res()
+    if (is.null(res)) return(div("Modelo no disponible",style=paste0("color:",COLOR_MUTED,";")))
+    eq  <- tryCatch(as.character(res$equation), error=function(e) "–")
+    div(class="formula-card",
+        tags$span("f(x)  =  ", style=paste0("color:",COLOR_MUTED,";font-size:13px;")),
+        tags$span(eq, style=paste0("color:",COLOR_ACCENT,";font-family:monospace;font-size:14px;")))
+  })
+  
+  output$model_metrics_row <- renderUI({
+    if (!PKL_OK) return(NULL)
+    res <- model_res()
+    if (is.null(res)) return(NULL)
+    col <- sel_col()
+    safe <- function(x, fmt="%.3f") tryCatch(sprintf(fmt, as.numeric(x)), error=function(e) "–")
+    n_tr <- tryCatch(as.character(PKL_RESULTS$n_train), error=function(e) "–")
+    div(style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;",
+        metric_chip_ui("R² Cal",   safe(res$cal_r2),         col),
+        metric_chip_ui("RMSE Cal", safe(res$cal_rmse,"%.1f"), col, "mg/L"),
+        metric_chip_ui("MAPE Cal", safe(res$cal_mape,"%.1f"), col, "%"),
+        metric_chip_ui("Bias",     safe(res$cal_bias,"%+.1f"),col, "mg/L"),
+        metric_chip_ui("n",        n_tr, COLOR_MUTED))
+  })
+  
+  output$model_1to1 <- renderPlotly({
+    empty <- plot_ly() %>% layout(paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG,
+                                  annotations=list(list(text=if(!PKL_OK)"Ejecuta train_models.py" else "Selecciona un modelo",
+                                                        x=0.5,y=0.5,xref="paper",yref="paper",showarrow=FALSE,
+                                                        font=list(color=COLOR_MUTED,size=13))))
+    if (!PKL_OK) return(empty)
+    res <- model_res(); if(is.null(res)) return(empty)
+    
+    y_true <- get_vec(PKL_RESULTS$y_true)
+    yhat   <- get_vec(res$yhat_cal)
+    kms_v  <- get_vec(PKL_RESULTS$kms)
+    if(length(y_true)==0 || length(yhat)==0) return(empty)
+    
+    lims <- c(min(y_true,yhat)*0.95, max(y_true,yhat)*1.05)
+    fig <- plot_ly() %>%
+      add_lines(x=lims,y=lims,showlegend=TRUE,name="1:1",
+                line=list(color=COLOR_MUTED,dash="dash",width=1.5))
+    for (km in sort(unique(kms_v))) {
+      mask <- kms_v==km; col <- km_color(km)
+      fig <- fig %>% add_markers(
+        x=y_true[mask], y=yhat[mask], name=paste0("Km ",as.integer(km)),
+        marker=list(size=10,color=col,line=list(width=1.5,color="#f4f7fb"),opacity=0.9),
+        hovertemplate="SSC_med: %{x:.1f}<br>SSC_mod: %{y:.1f}<extra></extra>")
+    }
+    fig %>% layout(
+      xaxis=list(title="SSC medido (mg/L)",showgrid=TRUE,gridcolor=COLOR_BORDER),
+      yaxis=list(title="SSC modelado (mg/L)",gridcolor=COLOR_BORDER),
+      paper_bgcolor=COLOR_CARD, plot_bgcolor=COLOR_BG,
+      font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
+      legend=list(orientation="h",y=-0.22), margin=list(l=56,r=20,t=30,b=70))
+  })
+  
+  output$model_residuals <- renderPlotly({
+    empty <- plot_ly() %>% layout(paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG)
+    if (!PKL_OK) return(empty)
+    res <- model_res(); if(is.null(res)) return(empty)
+    
+    y_true  <- get_vec(PKL_RESULTS$y_true)
+    yhat    <- get_vec(res$yhat_cal)
+    kms_v   <- get_vec(PKL_RESULTS$kms)
+    if(length(y_true)==0) return(empty)
+    residuals <- y_true - yhat
+    
+    fig <- plot_ly()
+    for (km in sort(unique(kms_v))) {
+      mask <- kms_v==km; col <- km_color(km); idx <- which(mask)-1
+      fig <- fig %>% add_bars(x=idx, y=residuals[mask],
+                              name=paste0("Km ",as.integer(km)),
+                              marker=list(color=col,opacity=0.85))
+    }
+    fig %>% add_lines(x=c(0,length(residuals)-1),y=c(0,0),showlegend=FALSE,
+                      line=list(color=COLOR_MUTED,dash="dash",width=1.5)) %>%
+      layout(barmode="overlay",
+             xaxis=list(title="Observación",showgrid=FALSE),
+             yaxis=list(title="Residuo SSC_med − SSC_mod (mg/L)",gridcolor=COLOR_BORDER),
+             paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG,
+             font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
+             legend=list(orientation="h",y=-0.22),margin=list(l=56,r=20,t=30,b=70))
+  })
+  
+  output$model_ratio_km <- renderPlotly({
+    empty <- plot_ly() %>% layout(paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG)
+    if (!PKL_OK) return(empty)
+    res <- model_res(); if(is.null(res)) return(empty)
+    
+    y_true <- get_vec(PKL_RESULTS$y_true)
+    yhat   <- get_vec(res$yhat_cal)
+    kms_v  <- get_vec(PKL_RESULTS$kms)
+    if(length(y_true)==0) return(empty)
+    ratio  <- y_true / ifelse(yhat==0, NA_real_, yhat)
+    
+    fig <- plot_ly()
+    for (km in sort(unique(kms_v))) {
+      mask <- kms_v==km; col <- km_color(km)
+      rv <- ratio[mask]; n <- sum(mask)
+      kl <- paste0("Km ",as.integer(km))
+      med <- median(rv,na.rm=TRUE)
+      p25 <- quantile(rv,.25,na.rm=TRUE); p75 <- quantile(rv,.75,na.rm=TRUE)
+      fig <- fig %>%
+        add_markers(x=rep(kl,n), y=rv, showlegend=FALSE,
+                    marker=list(size=9,color="#4c8bc7",opacity=0.55)) %>%
+        add_lines(x=c(kl,kl), y=c(p25,p75), showlegend=FALSE,
+                  line=list(color=col,width=6)) %>%
+        add_markers(x=kl, y=med, showlegend=FALSE,
+                    marker=list(size=14,color=col,line=list(width=2,color="#f4f7fb")),
+                    hovertemplate=paste0(kl,"<br>n=",n,"<br>Med: ",round(med,2),"<extra></extra>"))
+    }
+    # bandas ±20% y ±30%
+    n_km <- length(unique(kms_v))
+    fig %>% layout(
+      shapes=list(
+        list(type="rect",x0=-0.5,x1=n_km-0.5,y0=0.8,y1=1.2,
+             fillcolor="rgba(46,170,107,0.08)",line=list(width=0),xref="x",yref="y"),
+        list(type="rect",x0=-0.5,x1=n_km-0.5,y0=0.7,y1=1.3,
+             fillcolor="rgba(230,180,0,0.05)",line=list(width=0),xref="x",yref="y"),
+        list(type="line",x0=-0.5,x1=n_km-0.5,y0=1,y1=1,
+             line=list(color=COLOR_MUTED,dash="dash",width=1.5),xref="x",yref="y")),
+      xaxis=list(title="Estación",showgrid=FALSE),
+      yaxis=list(title="SSC_med / SSC_mod",gridcolor=COLOR_BORDER),
+      paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG,
+      font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
+      margin=list(l=60,r=20,t=30,b=60))
+  })
+  
+  output$loocv_metrics_row <- renderUI({
+    if (!PKL_OK) return(NULL)
+    res <- model_res(); if(is.null(res)) return(NULL)
+    col  <- "#2eaa6b"
+    safe <- function(x, fmt="%.3f") tryCatch(sprintf(fmt, as.numeric(x)), error=function(e) "–")
+    div(style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;",
+        metric_chip_ui("R² LOOCV",   safe(res$loo_r2),         col),
+        metric_chip_ui("RMSE LOOCV", safe(res$loo_rmse,"%.1f"), col, "mg/L"),
+        metric_chip_ui("MAPE LOOCV", safe(res$loo_mape,"%.1f"), col, "%"),
+        metric_chip_ui("Bias LOOCV", safe(res$loo_bias,"%+.1f"),col, "mg/L"))
+  })
+  
+  output$loocv_1to1 <- renderPlotly({
+    empty <- plot_ly() %>% layout(paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG)
+    if (!PKL_OK) return(empty)
+    res <- model_res(); if(is.null(res)) return(empty)
+    
+    y_true <- get_vec(PKL_RESULTS$y_true)
+    yloo   <- get_vec(res$yhat_loo)
+    if(length(y_true)==0) return(empty)
+    lims <- c(min(y_true,yloo)*0.95, max(y_true,yloo)*1.05)
+    
+    plot_ly() %>%
+      add_lines(x=lims,y=lims,showlegend=FALSE,
+                line=list(color=COLOR_MUTED,dash="dash",width=1.5)) %>%
+      add_markers(x=y_true,y=yloo,name="LOOCV",
+                  marker=list(size=10,color="#2eaa6b",line=list(width=1.5,color="#f4f7fb"),opacity=0.9),
+                  hovertemplate="SSC_med: %{x:.1f}<br>SSC_loo: %{y:.1f}<extra></extra>") %>%
+      layout(xaxis=list(title="SSC medido (mg/L)",showgrid=TRUE,gridcolor=COLOR_BORDER),
+             yaxis=list(title="SSC predicho LOOCV (mg/L)",gridcolor=COLOR_BORDER),
+             paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG,
+             font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
+             margin=list(l=56,r=20,t=30,b=70))
+  })
+  
+  output$loocv_error_dist <- renderPlotly({
+    empty <- plot_ly() %>% layout(paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG)
+    if (!PKL_OK) return(empty)
+    res <- model_res(); if(is.null(res)) return(empty)
+    
+    y_true <- get_vec(PKL_RESULTS$y_true)
+    yloo   <- get_vec(res$yhat_loo)
+    if(length(y_true)==0) return(empty)
+    errors <- y_true - yloo
+    
+    plot_ly() %>%
+      add_histogram(x=errors, nbinsx=12,
+                    marker=list(color="#2eaa6b",opacity=0.75,line=list(color=COLOR_BORDER,width=1)),
+                    name="Error LOOCV") %>%
+      add_lines(x=c(0,0),y=c(0,max(tabulate(cut(errors,12)))+2),showlegend=FALSE,
+                line=list(color=COLOR_MUTED,dash="dash",width=1.5)) %>%
+      layout(xaxis=list(title="Error SSC_med − SSC_loo (mg/L)",showgrid=FALSE),
+             yaxis=list(title="Frecuencia",gridcolor=COLOR_BORDER),
+             paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG,
+             font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
+             margin=list(l=56,r=20,t=30,b=70))
+  })
+  
+  output$model_comparison <- renderPlotly({
+    empty <- plot_ly() %>% layout(paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG)
+    if (!PKL_OK) return(empty)
+    res_list <- tryCatch(PKL_RESULTS$results, error=function(e) NULL)
+    if (is.null(res_list)) return(empty)
+    
+    fig <- plot_ly()
+    for (k in names(MODEL_LABELS)) {
+      r <- tryCatch(res_list[[k]], error=function(e) NULL)
+      if (is.null(r)) next
+      col <- unname(MODEL_COLS[k])
+      if (is.na(col)) col <- COLOR_ACCENT
+      fig <- fig %>% add_bars(
+        name = MODEL_LABELS[[k]],
+        x    = c("R² Cal","R² LOOCV","RMSE Cal (÷500)","RMSE LOOCV (÷500)"),
+        y    = c(as.numeric(r$cal_r2), as.numeric(r$loo_r2),
+                 as.numeric(r$cal_rmse)/500, as.numeric(r$loo_rmse)/500),
+        marker=list(color=col,opacity=0.85,line=list(color=COLOR_BORDER,width=1)))
+    }
+    fig %>% layout(barmode="group",
+                   xaxis=list(showgrid=FALSE),
+                   yaxis=list(title="Valor (RMSE normalizado)",gridcolor=COLOR_BORDER),
+                   paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG,
+                   font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
+                   legend=list(orientation="h",y=-0.22),margin=list(l=56,r=20,t=30,b=70))
+  })
+  
+  # ═══════════════════════════════════════
+  # APLICACIÓN
+  # ═══════════════════════════════════════
+  output$app_model_badge_ui <- renderUI({
+    mdl <- sel_mdl()
+    lbl <- unname(MODEL_LABELS[mdl])
+    col <- unname(MODEL_COLS[mdl])
+    if (is.na(col)) col <- COLOR_ACCENT
+    tags$span(lbl, style=paste0(
+      "font-size:13px;font-weight:700;color:",col,";",
+      "background-color:",col,"20;padding:4px 14px;",
+      "border-radius:20px;border:1px solid ",col,"55;"))
+  })
+  
+  observe({
+    # Poblar selector de estaciones desde coords (siempre disponible)
+    ests <- if (VS_HAS_COORDS) sort(unique(df_vs_coords$estacion)) else integer(0)
+    if (length(ests)==0) return()
+    updateSelectInput(session,"app_estaciones",
+                      choices=c("Todas"="all", setNames(ests, paste0("E",ests))), selected="all")
+  })
+  
+  vs_filtered <- reactive({
+    if (!VS_HAS_SERIES) return(data.frame())
+    y0  <- input$app_year_slider[1]; y1 <- input$app_year_slider[2]
+    d   <- df_vs_global %>%
+      filter(!is.na(fecha), year(fecha)>=y0, year(fecha)<=y1)
+    sel <- input$app_estaciones
+    if (!is.null(sel) && !"all" %in% sel)
+      d <- d %>% filter(estacion %in% sel[sel!="all"])
+    d
+  })
+  
+  calamar_monthly <- reactive({
+    if (input$app_show_calamar != "si") return(NULL)
+    y0 <- input$app_year_slider[1]; y1 <- input$app_year_slider[2]
+    tryCatch({
+      mg <- Q_cal %>% inner_join(TSS_cal, by="Fecha") %>%
+        drop_na(Q_calamar, TSS_calamar) %>%
+        filter(year(Fecha)>=y0, year(Fecha)<=y1) %>%
+        mutate(ssc_cal = ((TSS_calamar*(1e6/86400)) / Q_calamar) * (1e6/1e3),
+               mes     = as.Date(format(Fecha,"%Y-%m-01")))
+      mg %>% group_by(mes) %>% summarise(ssc_cal=mean(ssc_cal,na.rm=TRUE),.groups="drop")
+    }, error=function(e) NULL)
+  })
+  
+  # ── Estaciones virtuales (mapa) ──
+  output$app_estmap_content <- renderUI({
+    if (!VS_HAS_COORDS)
+      return(div("Estaciones_virtuales.csv no encontrado.",
+                 style=paste0("color:",COLOR_MUTED,";font-size:13px;padding:20px;")))
+    
+    n_est <- nrow(df_vs_coords)
+    tagList(
+      tags$p(paste0("Ubicación de las ", n_est,
+                    " estaciones virtuales distribuidas a lo largo del tramo Km 11–19 del río Magdalena."),
+             style=paste0("font-size:14px;color:",COLOR_MUTED,";margin:16px 0 12px;")),
+      if (!VS_HAS_SERIES)
+        div(style=paste0("background:#fff8e1;border-left:4px solid #f59e0b;",
+                         "padding:10px 16px;border-radius:4px;font-size:13px;",
+                         "color:#92400e;margin-bottom:12px;"),
+            "⚠ series_estaciones_virtuales.xlsx no encontrado — solo se muestra el mapa de ubicación. ",
+            "Las series de SSC estarán disponibles cuando se cargue ese archivo.")
+      else NULL,
+      plotlyOutput("app_estmap_plot", height="540px"),
+      div(style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;",
+          metric_chip_ui("Estaciones virtuales", as.character(n_est), ACCENT2),
+          metric_chip_ui("Rango lat",
+                         paste0(round(min(df_vs_coords$lat,na.rm=TRUE),4),"° – ",
+                                round(max(df_vs_coords$lat,na.rm=TRUE),4),"°"), COLOR_MUTED),
+          metric_chip_ui("Rango lon",
+                         paste0(round(min(df_vs_coords$lon,na.rm=TRUE),4),"° – ",
+                                round(max(df_vs_coords$lon,na.rm=TRUE),4),"°"), COLOR_MUTED)
+      )
+    )
+  })
+  
+  output$app_estmap_plot <- renderPlotly({
+    req(VS_HAS_COORDS)
+    locs <- df_vs_coords %>% arrange(estacion)
+    
+    # Estaciones de campo (de df original) para overlay
+    sampling_lats <- c(11.10354,11.102,11.09628,11.09018,11.0755,11.0585,
+                       11.0428,11.0249,11.0011327,10.9919,10.9782,10.9637,10.9546)
+    sampling_lons <- c(-74.8516,-74.8513,-74.8497,-74.8492,-74.8456,-74.8387,
+                       -74.8195,-74.7911,-74.7660752,-74.7611,-74.7579,-74.7569,-74.7562)
+    sampling_names<- c("Km 0","Km 1","Km 3","Km 5","Km 7","Km 11",
+                       "Km 14","Km 17","Km 18","Km 19a","Km 19b","Km 19c","Km 19d")
+    
+    plot_ly() %>%
+      add_trace(lat=locs$lat, lon=locs$lon, type="scattermapbox", mode="markers+text",
+                text=paste0("E",locs$estacion), textposition="top right",
+                marker=list(size=10, color=ACCENT2, opacity=0.9),
+                hovertemplate="<b>E%{text}</b><br>Lat: %{lat:.5f}<br>Lon: %{lon:.5f}<extra></extra>",
+                name="Estaciones virtuales") %>%
+      add_trace(lat=sampling_lats, lon=sampling_lons, type="scattermapbox", mode="markers+text",
+                text=sampling_names, textposition="top right",
+                marker=list(size=14, color=COLOR_ACCENT, opacity=1, symbol="circle"),
+                textfont=list(size=9, color=COLOR_TEXT),
+                hovertemplate="<b>%{text}</b><br>Lat: %{lat:.5f}<br>Lon: %{lon:.5f}<extra></extra>",
+                name="Estaciones de campo") %>%
+      layout(
+        mapbox=list(style="carto-positron",
+                    center=list(lat=mean(c(locs$lat,sampling_lats)),
+                                lon=mean(c(locs$lon,sampling_lons))), zoom=11),
+        margin=list(l=0,r=0,t=0,b=0), paper_bgcolor=COLOR_CARD,
+        legend=list(orientation="v", x=0.01, y=0.99,
+                    bgcolor="rgba(255,255,255,0.85)",
+                    bordercolor=COLOR_BORDER, borderwidth=1))
+  })
+  
+  # ── Serie anual ──
+  output$app_anual_content <- renderUI({
+    d <- vs_filtered()
+    if (!is.data.frame(d) || nrow(d)==0)
+      return(div("Sin datos para el período seleccionado.",
+                 style=paste0("color:",COLOR_MUTED,";padding:20px;")))
+    plotlyOutput("app_anual_plot", height="440px")
+  })
+  
+  output$app_anual_plot <- renderPlotly({
+    d <- vs_filtered(); req(is.data.frame(d), nrow(d)>0, "SSC" %in% names(d))
+    y0 <- input$app_year_slider[1]; y1 <- input$app_year_slider[2]
+    
+    annual <- d %>% mutate(year=year(fecha)) %>%
+      group_by(year) %>%
+      summarise(m=mean(SSC,na.rm=TRUE), s=sd(SSC,na.rm=TRUE), .groups="drop")
+    
+    fig <- plot_ly()
+    if (nrow(annual)>1)
+      fig <- fig %>% add_ribbons(data=annual, x=~year, ymin=~(m-s), ymax=~(m+s),
+                                 fillcolor="rgba(26,107,154,0.12)", line=list(color="rgba(0,0,0,0)"), showlegend=FALSE)
+    fig <- fig %>% add_trace(data=annual, x=~year, y=~m,
+                             type="scatter", mode="lines+markers",
+                             name="Estaciones virtuales (media ± SD)",
+                             line=list(color=COLOR_ACCENT,width=2.5), marker=list(size=9,color=COLOR_ACCENT),
+                             hovertemplate="Año: %{x}<br>SSC: %{y:.1f} mg/L<extra></extra>")
+    
+    if (nrow(annual)>2) {
+      fit <- lm(m~year, data=annual); m_t <- coef(fit)[2]
+      xl  <- range(annual$year)
+      fig <- fig %>% add_lines(x=xl, y=coef(fit)[1]+coef(fit)[2]*xl,
+                               name=sprintf("Tendencia (%+.1f mg/L/año)", m_t),
+                               line=list(color=COLOR_ACCENT,dash="dash",width=1.5))
+    }
+    
+    cal <- calamar_monthly()
+    if (!is.null(cal) && nrow(cal)>0) {
+      cal_a <- cal %>% mutate(year=year(mes)) %>%
+        group_by(year) %>% summarise(ssc=mean(ssc_cal,na.rm=TRUE),.groups="drop")
+      fig <- fig %>% add_trace(data=cal_a, x=~year, y=~ssc,
+                               type="scatter", mode="lines+markers", name="Calamar (IDEAM)",
+                               line=list(color="#c0392b",width=2.5), marker=list(size=9,symbol="square"))
+    }
+    
+    fig %>% layout(
+      title=list(text=paste0("Serie anual SSC (",y0,"–",y1,")"),
+                 font=list(color=COLOR_TEXT,size=14)),
+      xaxis=list(title="Año",showgrid=TRUE,gridcolor=COLOR_BORDER),
+      yaxis=list(title="SSC (mg/L)",gridcolor=COLOR_BORDER),
+      paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG,
+      font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
+      legend=list(orientation="h",y=-0.2),margin=list(l=60,r=20,t=50,b=80))
+  })
+  
+  # ── Serie mensual ──
+  output$app_mensual_content <- renderUI({
+    d <- vs_filtered()
+    if (!is.data.frame(d) || nrow(d)==0)
+      return(div("Sin datos.",style=paste0("color:",COLOR_MUTED,";padding:20px;")))
+    plotlyOutput("app_mensual_plot", height="460px")
+  })
+  
+  output$app_mensual_plot <- renderPlotly({
+    d <- vs_filtered(); req(is.data.frame(d), nrow(d)>0)
+    ma_win <- input$app_ma_window
+    d$mes  <- as.Date(format(d$fecha,"%Y-%m-01"))
+    monthly <- d %>% group_by(estacion,mes) %>%
+      summarise(SSC=mean(SSC,na.rm=TRUE),.groups="drop")
+    ests   <- sort(unique(monthly$estacion))
+    n_col  <- max(3, min(length(ests),8))
+    cols_e <- RColorBrewer::brewer.pal(n_col,"Set2")
+    ecol   <- function(e) cols_e[(which(ests==e)-1)%%length(cols_e)+1]
+    
+    fig <- plot_ly()
+    for (est in ests) {
+      sub <- monthly %>% filter(estacion==est) %>% arrange(mes)
+      col <- ecol(est)
+      if (ma_win>1) {
+        y_ma <- stats::filter(sub$SSC, rep(1/ma_win,ma_win), sides=2)
+        fig <- fig %>%
+          add_lines(x=sub$mes, y=sub$SSC, showlegend=FALSE,
+                    line=list(color=col,width=1,dash="dot"), opacity=0.35) %>%
+          add_trace(x=sub$mes, y=y_ma, type="scatter", mode="lines+markers",
+                    name=paste0("E",est," MA",ma_win,"m"),
+                    line=list(color=col,width=2.5), marker=list(size=5,color=col))
+      } else {
+        fig <- fig %>% add_trace(x=sub$mes, y=sub$SSC,
+                                 type="scatter", mode="lines+markers", name=paste0("E",est),
+                                 line=list(color=col,width=2), marker=list(size=6,color=col))
+      }
+    }
+    
+    cal <- calamar_monthly()
+    if (!is.null(cal) && nrow(cal)>0) {
+      if (ma_win>1) {
+        y_ma <- stats::filter(cal$ssc_cal,rep(1/ma_win,ma_win),sides=2)
+        fig <- fig %>%
+          add_lines(x=cal$mes, y=cal$ssc_cal, showlegend=FALSE,
+                    line=list(color="#c0392b",dash="dot",width=1), opacity=0.35) %>%
+          add_lines(x=cal$mes, y=y_ma,
+                    name=paste0("Calamar MA",ma_win,"m"), line=list(color="#c0392b",width=2.5))
+      } else {
+        fig <- fig %>% add_lines(x=cal$mes, y=cal$ssc_cal,
+                                 name="Calamar (IDEAM)", line=list(color="#c0392b",dash="dot",width=2))
+      }
+    }
+    
+    fig %>% layout(
+      xaxis=list(title="Fecha",showgrid=TRUE,gridcolor=COLOR_BORDER),
+      yaxis=list(title="SSC (mg/L)",gridcolor=COLOR_BORDER),
+      paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG,
+      font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
+      legend=list(orientation="h",y=-0.22),margin=list(l=60,r=20,t=30,b=80))
+  })
+  
+  # ── Media móvil espacial ──
+  output$app_movil_content <- renderUI({
+    d <- vs_filtered()
+    if (!is.data.frame(d) || nrow(d)==0)
+      return(div("Sin datos.",style=paste0("color:",COLOR_MUTED,";padding:20px;")))
+    plotlyOutput("app_movil_plot",height="460px")
+  })
+  
+  output$app_movil_plot <- renderPlotly({
+    d <- vs_filtered(); req(is.data.frame(d),nrow(d)>0)
+    d$mes   <- as.Date(format(d$fecha,"%Y-%m-01"))
+    win     <- input$app_window
+    all_e   <- sort(unique(d$estacion))
+    monthly <- d %>% group_by(estacion,mes) %>%
+      summarise(SSC=mean(SSC,na.rm=TRUE),.groups="drop")
+    n_col  <- max(3, min(length(all_e),8))
+    cols_e <- RColorBrewer::brewer.pal(n_col,"Set2")
+    ecol   <- function(e) cols_e[(which(all_e==e)-1)%%length(cols_e)+1]
+    
+    fig <- plot_ly()
+    for (est in all_e) {
+      idx       <- which(all_e==est)
+      neighbors <- all_e[max(1,idx-win%/%2):min(length(all_e),idx+win%/%2)]
+      mm <- monthly %>% filter(estacion %in% neighbors) %>%
+        group_by(mes) %>% summarise(SSC=mean(SSC,na.rm=TRUE),.groups="drop") %>% arrange(mes)
+      col <- ecol(est)
+      fig <- fig %>% add_trace(x=mm$mes, y=mm$SSC, type="scatter", mode="lines+markers",
+                               name=paste0("E",est," (MM esp.)"),
+                               line=list(color=col,width=2), marker=list(size=5,color=col))
+    }
+    fig %>% layout(
+      xaxis=list(title="Fecha",showgrid=TRUE,gridcolor=COLOR_BORDER),
+      yaxis=list(title="SSC (mg/L)",gridcolor=COLOR_BORDER),
+      paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG,
+      font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
+      legend=list(orientation="h",y=-0.22),margin=list(l=60,r=20,t=30,b=80))
+  })
+  
+  # ── Ciclo multianual ──
+  output$app_ciclo_content <- renderUI({
+    d <- vs_filtered()
+    if (!is.data.frame(d) || nrow(d)==0)
+      return(div("Sin datos.",style=paste0("color:",COLOR_MUTED,";padding:20px;")))
+    plotlyOutput("app_ciclo_plot",height="460px")
+  })
+  
+  output$app_ciclo_plot <- renderPlotly({
+    d <- vs_filtered(); req(is.data.frame(d),nrow(d)>0)
+    climo <- d %>% mutate(mes_num=month(fecha)) %>%
+      group_by(mes_num) %>%
+      summarise(m=mean(SSC,na.rm=TRUE),s=sd(SSC,na.rm=TRUE),.groups="drop")
+    
+    plot_ly() %>%
+      add_ribbons(data=climo,x=~mes_num,ymin=~(m-s),ymax=~(m+s),
+                  fillcolor="rgba(26,107,154,0.12)",line=list(color="rgba(0,0,0,0)"),showlegend=FALSE) %>%
+      add_trace(data=climo,x=~mes_num,y=~m,type="scatter",mode="lines+markers",
+                name="Media mensual",
+                line=list(color=COLOR_ACCENT,width=2.5),marker=list(size=9,color=COLOR_ACCENT)) %>%
+      layout(
+        xaxis=list(title="Mes",tickvals=1:12,ticktext=MESES,showgrid=FALSE),
+        yaxis=list(title="SSC (mg/L)",gridcolor=COLOR_BORDER),
+        paper_bgcolor=COLOR_CARD,plot_bgcolor=COLOR_BG,
+        font=list(family="'Lato',sans-serif",size=12,color=COLOR_TEXT),
+        margin=list(l=60,r=20,t=30,b=60))
+  })
+  
+  # ── Mapa SSC (carga TIF) ──
+  output$app_mapa_content <- renderUI({
+    card(
+      section_title("Mapa de SSC modelada",
+                    "Carga una imagen TIF con banda NIR para calcular SSC con el modelo calibrado"),
+      # ── Disclaimer imágenes de ejemplo ──
+      div(style=paste0(
+        "background:",COLOR_ACCENT,"12;border:1px solid ",COLOR_ACCENT,"40;",
+        "border-radius:8px;padding:12px 18px;margin-bottom:16px;",
+        "display:flex;gap:10px;align-items:flex-start;"),
+        tags$span("💡", style="font-size:16px;flex-shrink:0;margin-top:1px;"),
+        div(
+          tags$span("Imágenes de ejemplo disponibles: ",
+                    style=paste0("font-weight:600;color:",COLOR_ACCENT,";font-size:13px;")),
+          tags$span(paste0(
+            "El repositorio incluye imágenes Sentinel-2 de ejemplo en la carpeta ",
+            "fotografias_sentinel/. Estas corresponden a escenas del tramo Km 11–19 ",
+            "del río Magdalena y pueden usarse directamente para probar esta herramienta. ",
+            "Nota: R limita el tamaño de archivos que se pueden subir a través del navegador ",
+            "— se recomienda usar imágenes recortadas al área de interés (< 50 MB) o ",
+            "las imágenes de ejemplo incluidas en la carpeta."),
+            style=paste0("font-size:13px;color:",COLOR_TEXT,";line-height:1.6;"))
+        )
+      ),
+      div(style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;align-items:flex-end;",
+          div(
+            tags$label("Cargar imagen TIF (banda NIR o multi-banda):",
+                       style=paste0("font-size:13px;color:",COLOR_MUTED,";font-weight:600;display:block;margin-bottom:6px;")),
+            fileInput("tif_upload","",accept=c(".tif",".tiff"),
+                      buttonLabel="📂 Seleccionar TIF", placeholder="Ningún archivo seleccionado",
+                      width="360px")
+          ),
+          div(style="width:160px;",
+              selectInput("tif_nir_band","Banda NIR en el TIF:",
+                          choices=setNames(1:8,paste0("Banda ",1:8)), selected=8)),
+          div(style="width:160px;",
+              numericInput("tif_scale","Factor escala (DN→reflectancia):",
+                           value=10000, min=1, step=1000))
+      ),
+      uiOutput("mapa_output_ui"),
+      plotlyOutput("mapa_ssc", height="560px")
+    )
+  })
+  
+  output$mapa_output_ui <- renderUI({
+    div(id="mapa_output_info",
+        style=paste0("min-height:40px;border-radius:8px;padding:10px 14px;",
+                     "background:",COLOR_BG,";border:1px solid ",COLOR_BORDER,";",
+                     "font-size:13px;color:",COLOR_MUTED,";margin-bottom:16px;"),
+        "Carga una imagen para generar el mapa de SSC.")
+  })
+  
+  output$mapa_ssc <- renderPlotly({
+    req(input$tif_upload)
+    # rasterio no está disponible en R nativo;
+    # se usa terra para leer TIF y calcular SSC con el modelo lineal calibrado
+    tryCatch({
+      library(terra)
+      r   <- rast(input$tif_upload$datapath)
+      nb  <- as.integer(input$tif_nir_band)
+      sf  <- as.numeric(input$tif_scale); if(is.na(sf)||sf<=0) sf <- 10000
+      nir_r <- r[[nb]] / sf
+      
+      # Máscara agua con NDWI (banda 3 = green si existe)
+      if (nlyr(r) >= 3) {
+        green_r <- r[[3]] / sf
+        ndwi_r  <- (green_r - nir_r) / (green_r + nir_r + 1e-9)
+        nir_r[ndwi_r <= 0] <- NA
+      }
+      
+      # Modelo SSC = m*NIR + b (regresión lineal sobre df_calib)
+      if (!is.data.frame(df_calib) || nrow(df_calib)==0) {
+        m_c <- 1; b_c <- 0
+      } else {
+        fit  <- lm(SSC ~ NIR, data=df_calib)
+        m_c  <- coef(fit)[2]; b_c <- coef(fit)[1]
+      }
+      ssc_r <- m_c * nir_r + b_c
+      ssc_r[ssc_r < 0] <- NA
+      
+      # Convertir a puntos (downsample)
+      ssc_df <- as.data.frame(ssc_r, xy=TRUE, na.rm=TRUE)
+      names(ssc_df) <- c("lon","lat","ssc")
+      step <- max(1L, as.integer(nrow(ssc_df)/4000))
+      ssc_df <- ssc_df[seq(1,nrow(ssc_df),by=step),]
+      
+      p10 <- quantile(ssc_df$ssc,0.10,na.rm=TRUE)
+      p90 <- quantile(ssc_df$ssc,0.90,na.rm=TRUE)
+      
+      plot_ly(ssc_df, lat=~lat, lon=~lon, type="scattermapbox", mode="markers",
+              marker=list(size=4, color=~ssc, colorscale="YlOrRd",
+                          cmin=p10, cmax=p90,
+                          colorbar=list(title=list(text="SSC (mg/L)"),thickness=16),
+                          opacity=0.85),
+              hovertemplate="Lon: %{lon:.4f}<br>Lat: %{lat:.4f}<br>SSC: %{marker.color:.0f} mg/L<extra></extra>") %>%
+        layout(mapbox=list(style="carto-positron",
+                           center=list(lat=mean(ssc_df$lat),lon=mean(ssc_df$lon)),zoom=12),
+               margin=list(l=0,r=0,t=0,b=0),paper_bgcolor=COLOR_CARD,
+               title=list(text="SSC modelada (mg/L) — Río Magdalena",
+                          font=list(color=COLOR_TEXT,size=14)))
+    }, error=function(e) {
+      plot_ly() %>% layout(paper_bgcolor=COLOR_CARD,
+                           annotations=list(list(text=paste0("Error: ",e$message),
+                                                 x=0.5,y=0.5,xref="paper",yref="paper",showarrow=FALSE,
+                                                 font=list(size=13,color="#c0392b"))))
+    })
+  })
+  
+  output$app_content <- renderUI(NULL)
+  
 }

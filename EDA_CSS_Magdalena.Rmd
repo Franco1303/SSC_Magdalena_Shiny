@@ -381,24 +381,18 @@ df %>% group_by(km) %>%
 ## Distribución de SSC
 
 ```{r dist_ssc}
-fig_list <- list()
-for (km in sort(unique(df$km))) {
-  sub <- df %>% filter(km==!!km)
-  col <- km_col(km)
-  fig_list[[length(fig_list)+1]] <- list(
-    hist=list(x=sub$SSC, color=col, name=paste0("Km ",km)),
-    box =list(y=sub$SSC, color=col)
-  )
-}
+# Color único — la distribución no requiere distinguir por km
+ACCENT <- "#1a6b9a"
 
 p_hist <- plot_ly()
 p_box  <- plot_ly()
 for (k in sort(unique(df$km))) {
-  sub <- df %>% filter(km==!!k); col <- km_col(k)
+  sub <- df %>% filter(km==!!k)
   p_hist <- p_hist %>% add_histogram(x=sub$SSC, name=paste0("Km ",k),
-    marker=list(color=col,opacity=0.75), nbinsx=15)
+    marker=list(color=ACCENT, opacity=0.75), nbinsx=15)
   p_box  <- p_box  %>% add_boxplot(y=sub$SSC, name=paste0("Km ",k),
-    marker=list(color=col), line=list(color=col), boxmean=TRUE, showlegend=FALSE)
+    marker=list(color=ACCENT), line=list(color=ACCENT),
+    boxmean=TRUE, showlegend=FALSE)
 }
 
 subplot(p_hist, p_box, nrows=1, shareY=FALSE, titleX=TRUE) %>%
@@ -826,21 +820,329 @@ fig %>% layout(
 
 ---
 
-# 8. Conclusiones
+# 8. Modelo empírico — Calibración y validación {.tabset}
+
+```{r load_models, include=FALSE}
+library(reticulate)
+pickle   <- import("pickle")
+builtins <- import_builtins()
+
+load_pkl <- function(path) {
+  tryCatch({
+    f   <- builtins$open(path, "rb")
+    obj <- pickle$load(f)
+    f$close()
+    obj
+  }, error=function(e) NULL)
+}
+
+PKL_RESULTS <- load_pkl("models/results.pkl")
+PKL_MODELS  <- load_pkl("models/models.pkl")
+PKL_OK      <- !is.null(PKL_RESULTS)
+
+MODEL_LABELS <- c(
+  lineal = "Regresión Lineal (NIR)",
+  rf     = "Random Forest",
+  gbm    = "Gradient Boosting",
+  svr    = "Support Vector Regression"
+)
+# Modelo seleccionado para el reporte (cambiar aquí)
+MODELO_SEL <- "lineal"
+```
+
+```{r modelo_header, echo=FALSE, results='asis'}
+if (PKL_OK) {
+  lbl <- MODEL_LABELS[[MODELO_SEL]]
+  cat(sprintf('
+<div class="info-card accent-left" style="margin-bottom:16px;">
+  <strong>Modelo seleccionado para reconstrucción:</strong>
+  <span style="color:#1a6b9a;font-weight:700;background:#e8f2fa;padding:3px 14px;
+               border-radius:20px;border:1px solid #aacde4;margin-left:8px;">%s</span>
+</div>', lbl))
+  
+  res <- PKL_RESULTS$results[[MODELO_SEL]]
+  cat(sprintf('
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin:16px 0;">
+  <div class="stat-box"><div class="stat-val">%.3f</div><div class="stat-lbl">R² Cal</div></div>
+  <div class="stat-box"><div class="stat-val">%.1f</div><div class="stat-lbl">RMSE Cal (mg/L)</div></div>
+  <div class="stat-box"><div class="stat-val">%.1f%%</div><div class="stat-lbl">MAPE Cal</div></div>
+  <div class="stat-box"><div class="stat-val">%.3f</div><div class="stat-lbl">R² LOOCV</div></div>
+  <div class="stat-box"><div class="stat-val">%.1f</div><div class="stat-lbl">RMSE LOOCV (mg/L)</div></div>
+</div>',
+    res$cal_r2, res$cal_rmse, res$cal_mape,
+    res$loo_r2, res$loo_rmse))
+  
+  cat(sprintf('<div class="formula-box">%s</div>', res$equation))
+} else {
+  cat('<div class="note">⚠ models/results.pkl no encontrado. Ejecuta train_models.py primero.</div>')
+}
+```
+
+## SSC medido vs modelado
+
+```{r modelo_1to1}
+if (PKL_OK) {
+  res    <- PKL_RESULTS$results[[MODELO_SEL]]
+  y_true <- unlist(PKL_RESULTS$y_true)
+  yhat   <- unlist(res$yhat_cal)
+  kms_v  <- unlist(PKL_RESULTS$kms)
+  lims   <- c(min(y_true,yhat)*0.95, max(y_true,yhat)*1.05)
+  
+  fig <- plot_ly() %>%
+    add_lines(x=lims, y=lims, showlegend=TRUE, name="1:1",
+              line=list(color="#6b7280",dash="dash",width=1.5))
+  for (km in sort(unique(kms_v))) {
+    mask <- kms_v==km; col <- km_col(km)
+    fig <- fig %>% add_markers(x=y_true[mask], y=yhat[mask],
+      name=paste0("Km ",km),
+      marker=list(size=10,color=col,line=list(width=1.5,color="white"),opacity=0.9),
+      hovertemplate="SSC_med: %{x:.1f}<br>SSC_mod: %{y:.1f}<extra></extra>")
+  }
+  fig %>% layout(xaxis=list(title="SSC medido (mg/L)",showgrid=TRUE,gridcolor="#e2e6ea"),
+                 yaxis=list(title="SSC modelado (mg/L)",gridcolor="#e2e6ea"),
+                 height=420, legend=list(orientation="h",y=-0.22))
+}
+```
+
+## Residuos
+
+```{r modelo_residuos}
+if (PKL_OK) {
+  res    <- PKL_RESULTS$results[[MODELO_SEL]]
+  y_true <- unlist(PKL_RESULTS$y_true)
+  yhat   <- unlist(res$yhat_cal)
+  kms_v  <- unlist(PKL_RESULTS$kms)
+  resids <- y_true - yhat
+  
+  fig <- plot_ly()
+  for (km in sort(unique(kms_v))) {
+    mask <- kms_v==km; col <- km_col(km); idx <- which(mask)-1
+    fig <- fig %>% add_bars(x=idx, y=resids[mask], name=paste0("Km ",km),
+      marker=list(color=col,opacity=0.85))
+  }
+  fig %>% add_lines(x=c(0,length(resids)-1), y=c(0,0), showlegend=FALSE,
+                    line=list(color="#6b7280",dash="dash",width=1.5)) %>%
+    layout(barmode="overlay",
+           xaxis=list(title="Observación",showgrid=FALSE),
+           yaxis=list(title="Residuo SSC_med − SSC_mod (mg/L)",gridcolor="#e2e6ea"),
+           height=400, legend=list(orientation="h",y=-0.22))
+}
+```
+
+## LOOCV
+
+```{r modelo_loocv}
+if (PKL_OK) {
+  res    <- PKL_RESULTS$results[[MODELO_SEL]]
+  y_true <- unlist(PKL_RESULTS$y_true)
+  yloo   <- unlist(res$yhat_loo)
+  errors <- y_true - yloo
+  lims   <- c(min(y_true,yloo)*0.95, max(y_true,yloo)*1.05)
+  
+  p1 <- plot_ly() %>%
+    add_lines(x=lims,y=lims,showlegend=FALSE,
+              line=list(color="#6b7280",dash="dash",width=1.5)) %>%
+    add_markers(x=y_true,y=yloo,name="LOOCV",
+      marker=list(size=9,color="#2eaa6b",line=list(width=1.5,color="white"),opacity=0.9)) %>%
+    layout(xaxis=list(title="SSC medido (mg/L)",showgrid=TRUE,gridcolor="#e2e6ea"),
+           yaxis=list(title="SSC predicho LOOCV (mg/L)",gridcolor="#e2e6ea"),height=380)
+  
+  p2 <- plot_ly() %>%
+    add_histogram(x=errors, nbinsx=12,
+      marker=list(color="#2eaa6b",opacity=0.75,line=list(color="#e2e6ea",width=1))) %>%
+    layout(xaxis=list(title="Error (mg/L)",showgrid=FALSE),
+           yaxis=list(title="Frecuencia",gridcolor="#e2e6ea"),height=380)
+  
+  subplot(p1, p2, nrows=1, shareY=FALSE, titleX=TRUE) %>%
+    layout(annotations=list(
+      list(text="<b>1:1 LOOCV</b>",x=0.23,y=1.05,xref="paper",yref="paper",showarrow=FALSE),
+      list(text="<b>Distribución de errores</b>",x=0.77,y=1.05,xref="paper",yref="paper",showarrow=FALSE)
+    ))
+}
+```
+
+## Comparación de modelos
+
+```{r modelo_comparacion}
+if (PKL_OK) {
+  fig <- plot_ly()
+  model_colors <- c(lineal="#1a6b9a", rf="#2eaa6b", gbm="#e07b2a", svr="#7b52ab")
+  for (k in names(MODEL_LABELS)) {
+    r <- PKL_RESULTS$results[[k]]; if(is.null(r)) next
+    col <- model_colors[[k]]
+    fig <- fig %>% add_bars(
+      name=MODEL_LABELS[[k]],
+      x=c("R² Cal","R² LOOCV","RMSE Cal (÷500)","RMSE LOOCV (÷500)"),
+      y=c(r$cal_r2, r$loo_r2, r$cal_rmse/500, r$loo_rmse/500),
+      marker=list(color=col,opacity=0.85,line=list(color="#e2e6ea",width=1)))
+  }
+  fig %>% layout(barmode="group",
+                 xaxis=list(showgrid=FALSE),
+                 yaxis=list(title="Valor (RMSE normalizado)",gridcolor="#e2e6ea"),
+                 height=380, legend=list(orientation="h",y=-0.22))
+}
+```
+
+---
+
+# 9. Aplicación — Estaciones virtuales {.tabset}
+
+```{r carga_vs, include=FALSE}
+# series_estaciones_virtuales.csv → fecha, estacion, SSC, NIR
+df_vs_series <- tryCatch({
+  d <- read_csv("series_estaciones_virtuales.csv", show_col_types=FALSE)
+  d$fecha <- as.Date(d$fecha)
+  d
+}, error=function(e) data.frame())
+
+# Estaciones_virtuales.csv → lon, lat, id
+df_vs_coords <- tryCatch({
+  read_csv("Estaciones_virtuales.csv", show_col_types=FALSE) %>% rename(estacion=id)
+}, error=function(e) data.frame())
+
+# Unir para tener lat/lon en las series
+df_vs <- if (nrow(df_vs_series)>0 && nrow(df_vs_coords)>0) {
+  left_join(df_vs_series, df_vs_coords, by="estacion")
+} else df_vs_series
+
+VS_OK        <- nrow(df_vs_series)>0
+VS_COORDS_OK <- nrow(df_vs_coords)>0
+```
+
+```{r app_header, echo=FALSE, results='asis'}
+if (PKL_OK) {
+  lbl <- MODEL_LABELS[[MODELO_SEL]]
+  cat(sprintf('
+<div class="info-card" style="border-left:4px solid #2eaa6b;margin-bottom:16px;">
+  <strong>Modelo utilizado para reconstrucción:</strong>
+  <span style="color:#2eaa6b;font-weight:700;background:#e8f5f0;padding:3px 14px;
+               border-radius:20px;border:1px solid #a3d9bc;margin-left:8px;">%s</span><br>
+  <span style="font-size:13px;color:#6b7280;">Series de SSC reconstruidas 2019–2025 · Estaciones E1–E16 · Río Magdalena km 11–19</span>
+</div>', lbl))
+}
+if (!VS_OK) {
+  cat('<div class="note">⚠ series_estaciones_virtuales.xlsx no encontrado — las series de SSC se mostrarán cuando se genere ese archivo.</div>')
+}
+```
+
+## Mapa de estaciones virtuales
+
+```{r mapa_estaciones_virtuales}
+if (VS_COORDS_OK) {
+  locs <- df_vs_coords %>% arrange(estacion)
+  sampling_lats  <- c(11.10354,11.102,11.09628,11.09018,11.0755,11.0585,11.0428,
+                      11.0249,11.0011327,10.9919,10.9782,10.9637,10.9546)
+  sampling_lons  <- c(-74.8516,-74.8513,-74.8497,-74.8492,-74.8456,-74.8387,-74.8195,
+                      -74.7911,-74.7660752,-74.7611,-74.7579,-74.7569,-74.7562)
+  sampling_names <- c("Km 0","Km 1","Km 3","Km 5","Km 7","Km 11",
+                      "Km 14","Km 17","Km 18","Km 19a","Km 19b","Km 19c","Km 19d")
+  plot_ly() %>%
+    add_trace(lat=locs$lat, lon=locs$lon, type="scattermapbox", mode="markers+text",
+              text=paste0("E",locs$estacion), textposition="top right",
+              marker=list(size=10, color="#2eaa6b", opacity=0.9),
+              name="Estaciones virtuales") %>%
+    add_trace(lat=sampling_lats, lon=sampling_lons, type="scattermapbox", mode="markers+text",
+              text=sampling_names, textposition="top right",
+              marker=list(size=13, color="#1a6b9a", opacity=1),
+              name="Estaciones de campo") %>%
+    layout(mapbox=list(style="carto-positron",
+                       center=list(lat=mean(c(locs$lat,sampling_lats)),
+                                   lon=mean(c(locs$lon,sampling_lons))), zoom=11),
+           margin=list(l=0,r=0,t=0,b=0), height=520,
+           legend=list(orientation="v",x=0.01,y=0.99))
+} else {
+  cat("Estaciones_virtuales.csv no encontrado.")
+}
+```
+
+## Serie anual
+
+```{r app_serie_anual}
+if (VS_OK) {
+  annual <- df_vs %>%
+    mutate(year=year(fecha)) %>%
+    group_by(year) %>%
+    summarise(m=mean(SSC,na.rm=T), s=sd(SSC,na.rm=T), .groups="drop")
+  
+  fig <- plot_ly()
+  if (nrow(annual)>1)
+    fig <- fig %>% add_ribbons(data=annual, x=~year, ymin=~(m-s), ymax=~(m+s),
+      fillcolor="rgba(26,107,154,0.12)", line=list(color="rgba(0,0,0,0)"), showlegend=FALSE)
+  fig <- fig %>% add_trace(data=annual, x=~year, y=~m, type="scatter", mode="lines+markers",
+    name="Media ± SD", line=list(color="#1a6b9a",width=2.5),
+    marker=list(size=9,color="#1a6b9a"),
+    hovertemplate="Año: %{x}<br>SSC: %{y:.1f} mg/L<extra></extra>")
+  if (nrow(annual)>2) {
+    fit <- lm(m~year, data=annual); m_t <- coef(fit)[2]
+    xl  <- range(annual$year)
+    fig <- fig %>% add_lines(x=xl, y=coef(fit)[1]+coef(fit)[2]*xl,
+      name=sprintf("Tendencia (%+.1f mg/L/año)",m_t),
+      line=list(color="#1a6b9a",dash="dash",width=1.5))
+  }
+  fig %>% layout(xaxis=list(title="Año",showgrid=TRUE,gridcolor="#e2e6ea"),
+                 yaxis=list(title="SSC (mg/L)",gridcolor="#e2e6ea"),
+                 height=440, legend=list(orientation="h",y=-0.22))
+}
+```
+
+## Serie mensual
+
+```{r app_serie_mensual}
+if (VS_OK) {
+  monthly <- df_vs %>%
+    mutate(mes=as.Date(format(fecha,"%Y-%m-01"))) %>%
+    group_by(estacion,mes) %>%
+    summarise(SSC=mean(SSC,na.rm=T), .groups="drop")
+  
+  ests   <- sort(unique(monthly$estacion))
+  n_col  <- max(3,min(length(ests),8))
+  cols_e <- RColorBrewer::brewer.pal(n_col,"Set2")
+  ecol   <- function(e) cols_e[(which(ests==e)-1)%%length(cols_e)+1]
+  
+  fig <- plot_ly()
+  for (est in ests) {
+    sub <- monthly %>% filter(estacion==est) %>% arrange(mes)
+    col <- ecol(est)
+    fig <- fig %>% add_trace(x=sub$mes, y=sub$SSC, type="scatter", mode="lines+markers",
+      name=paste0("E",est), line=list(color=col,width=1.8),
+      marker=list(size=5,color=col))
+  }
+  fig %>% layout(xaxis=list(title="Fecha",showgrid=TRUE,gridcolor="#e2e6ea"),
+                 yaxis=list(title="SSC (mg/L)",gridcolor="#e2e6ea"),
+                 height=460, legend=list(orientation="h",y=-0.22))
+}
+```
+
+## Ciclo multianual
+
+```{r app_ciclo}
+if (VS_OK) {
+  climo <- df_vs %>%
+    mutate(mes_num=month(fecha)) %>%
+    group_by(mes_num) %>%
+    summarise(m=mean(SSC,na.rm=T), s=sd(SSC,na.rm=T), .groups="drop")
+  
+  plot_ly() %>%
+    add_ribbons(data=climo, x=~mes_num, ymin=~(m-s), ymax=~(m+s),
+      fillcolor="rgba(26,107,154,0.12)", line=list(color="rgba(0,0,0,0)"), showlegend=FALSE) %>%
+    add_trace(data=climo, x=~mes_num, y=~m, type="scatter", mode="lines+markers",
+      name="Media mensual", line=list(color="#1a6b9a",width=2.5),
+      marker=list(size=9,color="#1a6b9a")) %>%
+    layout(xaxis=list(title="Mes",tickvals=1:12,ticktext=MESES,showgrid=FALSE),
+           yaxis=list(title="SSC (mg/L)",gridcolor="#e2e6ea"),
+           height=420)
+}
+```
+
+---
+
+# 10. Conclusiones
 
 <div class="info-card accent-left">
 
-**01 — Dataset final de calibración**  
-El proceso de control de calidad y selección espacial permitió consolidar entre **27 y 39 observaciones** con R² entre **0.58 y 0.73**, ubicadas en los kilómetros 0, 1, 3, 14, 17, 18 y 19 del tramo estuarino.
+El proceso de control de calidad permitió consolidar entre 27 y 39 observaciones de calibración distribuidas en los kilómetros 0, 1, 3, 14, 17, 18 y 19, alcanzando coeficientes de determinación entre 0.58 y 0.73. Las bandas Red, NIR y rojo 3 presentaron las correlaciones más altas con la concentración de sedimentos suspendidos (SSC), resultado consistente con lo reportado en la literatura para sistemas fluviales turbios. Entre los modelos evaluados, la regresión potencial log-log basada en la banda NIR mostró el mejor equilibrio entre simplicidad y desempeño, con métricas satisfactorias tanto en calibración como en validación LOOCV. Los modelos de aprendizaje automático como Random Forest y Gradient Boosting mostraron potencial, aunque el tamaño actual del dataset limita su capacidad de generalización.
 
-**02 — Bandas más informativas**  
-Las bandas **Red, NIR y rojo 3** mostraron las correlaciones más altas con SSC, consistente con la física de retrodispersión de sedimentos en agua turbia.
-
-**03 — Perspectivas de modelado**  
-Con ~30 puntos el dataset es apto para **regresión potencial log-log** y **regresión lineal múltiple** con 2–3 variables, validadas mediante Leave-One-Out Cross Validation (LOOCV). De ampliarse podría aplicarse Random Forest u otros algoritmos de machine learning.
-
-**04 — Limitaciones**  
-Un modelo de este tipo busca ofrecer una alternativa ante la falta importante de datos *in situ*, pero su desarrollo está también limitado por esta misma problemática. La influencia de dragados en km 1–11 y los efectos de marea en la zona estuarina representan fuentes de incertidumbre importantes.
+Con aproximadamente 30 observaciones, el conjunto de datos resulta adecuado para aplicar regresiones potenciales y modelos múltiples validados mediante LOOCV, mientras que una ampliación futura de la base de datos permitiría implementar enfoques de machine learning de manera más robusta. El modelo desarrollado busca ofrecer una alternativa frente a la limitada disponibilidad de datos in situ en el río Magdalena; sin embargo, esta misma limitación condiciona su alcance y capacidad predictiva. Además, actividades como los dragados en estaciones cercanas a la desembocadura pueden introducir ruido adicional en la señal espectral y deben considerarse durante la interpretación de los resultados y en futuros procesos de calibración.
 
 </div>
 

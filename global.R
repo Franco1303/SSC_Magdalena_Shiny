@@ -105,21 +105,21 @@ load_hydro <- function() {
     d$Fecha <- as_datetime(d$Fecha)
     d
   }, error=function(e) data.frame(Fecha=as.POSIXct(character()), Q_calamar=numeric()))
-
+  
   TSS_cal <- tryCatch({
     d <- read_delim("TR_KT_D_QS_D@29037020.data", delim="|", show_col_types=FALSE)
     colnames(d) <- c("Fecha","TSS_calamar")
     d$Fecha <- as_datetime(d$Fecha)
     d
   }, error=function(e) data.frame(Fecha=as.POSIXct(character()), TSS_calamar=numeric()))
-
+  
   Q_baq <- tryCatch({
     d <- read_excel("caudal_ganara.xlsx")
     colnames(d) <- c("Fecha","Q_barranquilla")
     d$Fecha <- as_datetime(d$Fecha)
     d
   }, error=function(e) data.frame(Fecha=as.POSIXct(character()), Q_barranquilla=numeric()))
-
+  
   merged <- full_join(Q_cal, TSS_cal, by="Fecha") %>%
     full_join(Q_baq, by="Fecha") %>%
     arrange(Fecha) %>%
@@ -129,11 +129,11 @@ load_hydro <- function() {
       Q_sinincora  = ifelse(!is.na(Q_calamar),
                             Q_calamar - (0.080649*Q_calamar - 126.19), NA)
     )
-
+  
   km19_ssc <- df %>% filter(km==19) %>%
     select(Fecha=scc_date, SSC) %>%
     mutate(Fecha=as_datetime(Fecha))
-
+  
   tss_baq <- if (nrow(km19_ssc)>0 && nrow(Q_baq)>0) {
     inner_join(km19_ssc, Q_baq, by="Fecha") %>%
       mutate(TSS_barranquilla = SSC * Q_barranquilla * 0.0864 / 1000)
@@ -141,7 +141,7 @@ load_hydro <- function() {
     data.frame(Fecha=as.POSIXct(character()), SSC=numeric(),
                Q_barranquilla=numeric(), TSS_barranquilla=numeric())
   }
-
+  
   list(Q_cal=Q_cal, TSS_cal=TSS_cal, Q_baq=Q_baq, merged=merged, tss_baq=tss_baq)
 }
 
@@ -182,6 +182,112 @@ BANDS_S2 <- list(
   list(name="SWIR2 (B12)",      lambda=2202, res="20 m", color="#085041",
        desc="Alta absorción en agua. Útil para mapeo de sedimentos costeros.")
 )
+
+# ─────────────────────────────────────────
+# MODELOS PKL via reticulate
+# ─────────────────────────────────────────
+library(reticulate)
+
+pickle  <- import("pickle")
+builtins <- import_builtins()
+
+load_pkl <- function(path) {
+  tryCatch({
+    f <- builtins$open(path, "rb")
+    obj <- pickle$load(f)
+    f$close()
+    obj
+  }, error = function(e) NULL)
+}
+
+PKL_RESULTS_RAW <- load_pkl("models/results.pkl")
+PKL_MODELS      <- load_pkl("models/models.pkl")
+
+# Convertir de objeto Python a lista R nativa si hace falta
+PKL_RESULTS <- if (!is.null(PKL_RESULTS_RAW)) {
+  tryCatch(reticulate::py_to_r(PKL_RESULTS_RAW), error=function(e) PKL_RESULTS_RAW)
+} else NULL
+
+PKL_OK <- !is.null(PKL_RESULTS)
+
+MODEL_LABELS <- c(
+  lineal = "Regresión Lineal (NIR)",
+  rf     = "Random Forest",
+  gbm    = "Gradient Boosting",
+  svr    = "Support Vector Regression"
+)
+MODEL_COLS <- c(
+  lineal = COLOR_ACCENT,
+  rf     = "#2eaa6b",
+  gbm    = "#e07b2a",
+  svr    = "#7b52ab"
+)
+
+# ─────────────────────────────────────────
+# DATOS CALIBRACIÓN (para mapa, fallback)
+# ─────────────────────────────────────────
+load_calib <- function() {
+  # Intenta puntos_finales_calamar.csv; si no existe usa puntos_alternativos.csv
+  dc <- tryCatch({
+    d <- read_csv("puntos_finales_calamar.csv", show_col_types=FALSE)
+    if ("km" %in% names(d))
+      d <- d %>% filter(km != "Calamar") %>%
+        mutate(km = suppressWarnings(as.numeric(km)))
+    d %>% drop_na(NIR, SSC)
+  }, error=function(e) {
+    tryCatch({
+      read_csv("puntos_alternativos.csv", show_col_types=FALSE) %>%
+        drop_na(NIR, SSC)
+    }, error=function(e2) data.frame())
+  })
+  dc
+}
+df_calib <- load_calib()
+
+# ─────────────────────────────────────────
+# ESTACIONES VIRTUALES
+# series_estaciones_virtuales.csv → fecha, estacion, SSC, NIR
+# Estaciones_virtuales.csv        → lon, lat, id
+# ─────────────────────────────────────────
+df_vs_series <- tryCatch({
+  d <- read_csv("series_estaciones_virtuales.csv", show_col_types=FALSE)
+  d$fecha <- as.Date(d$fecha)
+  d
+}, error=function(e) data.frame())
+
+df_vs_coords <- tryCatch({
+  d <- read_csv("Estaciones_virtuales.csv", show_col_types=FALSE)
+  d %>% rename(estacion=id)
+}, error=function(e) data.frame())
+
+# Unir series con coords
+df_vs_global <- if (nrow(df_vs_series)>0 && nrow(df_vs_coords)>0) {
+  left_join(df_vs_series, df_vs_coords, by="estacion")
+} else if (nrow(df_vs_series)>0) {
+  df_vs_series
+} else {
+  df_vs_coords %>% mutate(fecha=as.Date(NA_character_), SSC=NA_real_, NIR=NA_real_)
+}
+
+VS_HAS_SERIES <- nrow(df_vs_series)>0
+VS_HAS_COORDS <- nrow(df_vs_coords)>0
+
+ACCENT2 <- "#2eaa6b"
+ACCENT3 <- "#e07b2a"
+ACCENT4 <- "#7b52ab"
+
+metric_chip_ui <- function(label, value, color=COLOR_ACCENT, sub=NULL) {
+  div(style=paste0(
+    "background:linear-gradient(135deg,#f4f7fb 0%,#ffffff 100%);",
+    "border-radius:10px;padding:16px 20px;border:1px solid ",COLOR_BORDER,
+    ";min-width:130px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.06);"),
+    div(label, style=paste0("font-size:10px;color:",COLOR_MUTED,
+                            ";text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;")),
+    div(value, style=paste0("font-size:24px;font-weight:700;color:",color,
+                            ";font-family:'JetBrains Mono','Fira Code',monospace;")),
+    if (!is.null(sub)) div(sub, style=paste0("font-size:10px;color:",COLOR_MUTED,";margin-top:4px;"))
+  )
+}
 
 FORMULAS <- list(
   list(tag="Sedimentos", title="Transporte de sedimentos en suspensión (TSS)",
