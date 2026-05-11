@@ -1367,111 +1367,194 @@ server <- function(input, output, session) {
         margin=list(l=60,r=20,t=30,b=60))
   })
   
-  # ── Mapa SSC (carga TIF) ──
+  # ── Mapa SSC — navegación por carpeta ──────────────────────────────────────
+  #
+  # Constantes (ajusta si tu carpeta tiene otro nombre o banda)
+  CARPETA_TIF  <- "fotografias_sentinel"
+  BANDA_NIR    <- 8L
+  FACTOR_ESCALA <- 10000
+  
+  # Helper: lista TIFs ordenados por fecha extraída del nombre
+  # Patrón esperado: S2_YYYY-MM-DD_*.tif
+  listar_tifs <- function() {
+    archivos <- list.files(CARPETA_TIF, pattern="\\.(tif|tiff)$",
+                           full.names=TRUE, ignore.case=TRUE)
+    if (length(archivos) == 0) return(data.frame(path=character(), label=character(),
+                                                  fecha=as.Date(character()), stringsAsFactors=FALSE))
+    fechas <- regmatches(basename(archivos),
+                         regexpr("\\d{4}-\\d{2}-\\d{2}", basename(archivos)))
+    fechas_d <- suppressWarnings(as.Date(fechas, format="%Y-%m-%d"))
+    labels <- ifelse(
+      !is.na(fechas_d),
+      format(fechas_d, "%d %b %Y"),   # ej. "27 Ene 2018"
+      basename(archivos)
+    )
+    df_t <- data.frame(path=archivos, label=labels, fecha=fechas_d, stringsAsFactors=FALSE)
+    df_t[order(df_t$fecha, na.last=TRUE), ]
+  }
+  
+  # Índice reactivo de la imagen activa (0-based internamente, 1-based para mostrar)
+  img_idx <- reactiveVal(1L)
+  
+  observeEvent(input$btn_mapa_prev, {
+    tifs <- listar_tifs()
+    if (nrow(tifs) == 0) return()
+    img_idx(((img_idx() - 2L) %% nrow(tifs)) + 1L)   # circular
+  })
+  
+  observeEvent(input$btn_mapa_next, {
+    tifs <- listar_tifs()
+    if (nrow(tifs) == 0) return()
+    img_idx((img_idx() %% nrow(tifs)) + 1L)            # circular
+  })
+  
+  # UI del mapa (botones + disclaimer + plotly)
   output$app_mapa_content <- renderUI({
+    tifs  <- listar_tifs()
+    n     <- nrow(tifs)
+    idx   <- img_idx()
+    label <- if (n > 0) tifs$label[idx] else "—"
+    
     card(
       section_title("Mapa de SSC modelada",
-                    "Carga una imagen TIF con banda NIR para calcular SSC con el modelo calibrado"),
-      # ── Disclaimer imágenes de ejemplo ──
+                    "Navega entre las imágenes Sentinel-2 para visualizar la SSC modelada"),
+      
+      # ── Controles de navegación ──
+      div(style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;",
+        actionButton("btn_mapa_prev", "◀ Anterior",
+                     style=paste0("padding:8px 18px;font-size:13px;font-weight:600;",
+                                  "border-radius:8px;border:1px solid ",COLOR_BORDER,";",
+                                  "background:",COLOR_CARD,";color:",COLOR_TEXT,";")),
+        div(style=paste0("flex:1;text-align:center;font-size:15px;font-weight:700;",
+                         "color:",COLOR_ACCENT,";min-width:160px;"),
+            label),
+        actionButton("btn_mapa_next", "Siguiente ▶",
+                     style=paste0("padding:8px 18px;font-size:13px;font-weight:600;",
+                                  "border-radius:8px;border:1px solid ",COLOR_BORDER,";",
+                                  "background:",COLOR_CARD,";color:",COLOR_TEXT,";")),
+        div(style=paste0("font-size:12px;color:",COLOR_MUTED,";min-width:50px;text-align:right;"),
+            if (n > 0) paste0(idx, " / ", n) else "Sin imágenes")
+      ),
+      
+      # ── Disclaimer ──
       div(style=paste0(
         "background:",COLOR_ACCENT,"12;border:1px solid ",COLOR_ACCENT,"40;",
         "border-radius:8px;padding:12px 18px;margin-bottom:16px;",
         "display:flex;gap:10px;align-items:flex-start;"),
         tags$span("💡", style="font-size:16px;flex-shrink:0;margin-top:1px;"),
         div(
-          tags$span("Imágenes de ejemplo disponibles: ",
+          tags$span("Imágenes disponibles: ",
                     style=paste0("font-weight:600;color:",COLOR_ACCENT,";font-size:13px;")),
           tags$span(paste0(
-            "El repositorio incluye imágenes Sentinel-2 de ejemplo en la carpeta ",
-            "fotografias_sentinel/. Estas corresponden a escenas del tramo Km 11–19 ",
-            "del río Magdalena y pueden usarse directamente para probar esta herramienta. ",
-            "Nota: R limita el tamaño de archivos que se pueden subir a través del navegador ",
-            "— se recomienda usar imágenes recortadas al área de interés (< 50 MB) o ",
-            "las imágenes de ejemplo incluidas en la carpeta."),
+            "Las imágenes Sentinel-2 están en la carpeta '", CARPETA_TIF, "/'. ",
+            "Corresponden al tramo Km 11–19 del río Magdalena. ",
+            "Usa los botones para navegar entre fechas."),
             style=paste0("font-size:13px;color:",COLOR_TEXT,";line-height:1.6;"))
         )
       ),
-      div(style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;align-items:flex-end;",
-          div(
-            tags$label("Cargar imagen TIF (banda NIR o multi-banda):",
-                       style=paste0("font-size:13px;color:",COLOR_MUTED,";font-weight:600;display:block;margin-bottom:6px;")),
-            fileInput("tif_upload","",accept=c(".tif",".tiff"),
-                      buttonLabel="📂 Seleccionar TIF", placeholder="Ningún archivo seleccionado",
-                      width="360px")
-          ),
-          div(style="width:160px;",
-              selectInput("tif_nir_band","Banda NIR en el TIF:",
-                          choices=setNames(1:8,paste0("Banda ",1:8)), selected=8)),
-          div(style="width:160px;",
-              numericInput("tif_scale","Factor escala (DN→reflectancia):",
-                           value=10000, min=1, step=1000))
-      ),
+      
+      # ── Barra de estado ──
       uiOutput("mapa_output_ui"),
+      
+      # ── Mapa ──
       plotlyOutput("mapa_ssc", height="560px")
     )
   })
   
   output$mapa_output_ui <- renderUI({
-    div(id="mapa_output_info",
-        style=paste0("min-height:40px;border-radius:8px;padding:10px 14px;",
+    tifs <- listar_tifs()
+    msg  <- if (nrow(tifs) == 0)
+      paste0("⚠️ No se encontraron imágenes TIF en '", CARPETA_TIF, "/'.")
+    else
+      "Procesando imagen…"
+    div(style=paste0("min-height:40px;border-radius:8px;padding:10px 14px;",
                      "background:",COLOR_BG,";border:1px solid ",COLOR_BORDER,";",
                      "font-size:13px;color:",COLOR_MUTED,";margin-bottom:16px;"),
-        "Carga una imagen para generar el mapa de SSC.")
+        msg)
   })
   
   output$mapa_ssc <- renderPlotly({
-    req(input$tif_upload)
-    # rasterio no está disponible en R nativo;
-    # se usa terra para leer TIF y calcular SSC con el modelo lineal calibrado
+    # Re-ejecuta cuando cambia el índice
+    idx  <- img_idx()
+    tifs <- listar_tifs()
+    
+    fig_vacia <- function(msg="Sin imagen") {
+      plot_ly() %>% layout(
+        paper_bgcolor=COLOR_CARD, height=560,
+        mapbox=list(style="carto-positron",
+                    center=list(lat=11.0, lon=-74.85), zoom=11),
+        margin=list(l=0,r=0,t=0,b=0),
+        annotations=list(list(text=msg, x=0.5, y=0.5,
+                              xref="paper", yref="paper", showarrow=FALSE,
+                              font=list(size=13, color=COLOR_MUTED)))
+      )
+    }
+    
+    if (nrow(tifs) == 0) return(fig_vacia(paste0("No hay TIFs en '", CARPETA_TIF, "/'")))
+    
+    ruta  <- tifs$path[idx]
+    label <- tifs$label[idx]
+    
     tryCatch({
       library(terra)
-      r   <- rast(input$tif_upload$datapath)
-      nb  <- as.integer(input$tif_nir_band)
-      sf  <- as.numeric(input$tif_scale); if(is.na(sf)||sf<=0) sf <- 10000
+      r     <- rast(ruta)
+      nb    <- BANDA_NIR
+      sf    <- FACTOR_ESCALA
       nir_r <- r[[nb]] / sf
       
-      # Máscara agua con NDWI (banda 3 = green si existe)
+      # Máscara agua con NDWI (banda 3 = green)
       if (nlyr(r) >= 3) {
         green_r <- r[[3]] / sf
         ndwi_r  <- (green_r - nir_r) / (green_r + nir_r + 1e-9)
         nir_r[ndwi_r <= 0] <- NA
       }
       
-      # Modelo SSC = m*NIR + b (regresión lineal sobre df_calib)
-      if (!is.data.frame(df_calib) || nrow(df_calib)==0) {
+      # Modelo SSC = m*NIR + b
+      if (!is.data.frame(df_calib) || nrow(df_calib) == 0) {
         m_c <- 1; b_c <- 0
       } else {
-        fit  <- lm(SSC ~ NIR, data=df_calib)
-        m_c  <- coef(fit)[2]; b_c <- coef(fit)[1]
+        fit <- lm(SSC ~ NIR, data=df_calib)
+        m_c <- coef(fit)[2]; b_c <- coef(fit)[1]
       }
       ssc_r <- m_c * nir_r + b_c
       ssc_r[ssc_r < 0] <- NA
       
-      # Convertir a puntos (downsample)
+      # Downsample
       ssc_df <- as.data.frame(ssc_r, xy=TRUE, na.rm=TRUE)
       names(ssc_df) <- c("lon","lat","ssc")
-      step <- max(1L, as.integer(nrow(ssc_df)/4000))
-      ssc_df <- ssc_df[seq(1,nrow(ssc_df),by=step),]
+      step   <- max(1L, as.integer(nrow(ssc_df) / 4000))
+      ssc_df <- ssc_df[seq(1, nrow(ssc_df), by=step), ]
       
-      p10 <- quantile(ssc_df$ssc,0.10,na.rm=TRUE)
-      p90 <- quantile(ssc_df$ssc,0.90,na.rm=TRUE)
+      p10 <- quantile(ssc_df$ssc, 0.10, na.rm=TRUE)
+      p90 <- quantile(ssc_df$ssc, 0.90, na.rm=TRUE)
+      
+      # Actualizar barra de estado
+      output$mapa_output_ui <- renderUI({
+        div(style=paste0("min-height:40px;border-radius:8px;padding:10px 14px;",
+                         "background:",COLOR_BG,";border:1px solid ",COLOR_BORDER,";",
+                         "font-size:13px;color:",COLOR_MUTED,";margin-bottom:16px;"),
+            paste0("✅ ", label, " — banda NIR ", nb, " | escala 1/", sf,
+                   " | SSC: ", round(min(ssc_df$ssc,na.rm=TRUE)),
+                   "–", round(max(ssc_df$ssc,na.rm=TRUE)), " mg/L",
+                   " | píxeles agua: ", format(nrow(ssc_df), big.mark=",")))
+      })
       
       plot_ly(ssc_df, lat=~lat, lon=~lon, type="scattermapbox", mode="markers",
               marker=list(size=4, color=~ssc, colorscale="YlOrRd",
                           cmin=p10, cmax=p90,
-                          colorbar=list(title=list(text="SSC (mg/L)"),thickness=16),
+                          colorbar=list(title=list(text="SSC (mg/L)"), thickness=16),
                           opacity=0.85),
               hovertemplate="Lon: %{lon:.4f}<br>Lat: %{lat:.4f}<br>SSC: %{marker.color:.0f} mg/L<extra></extra>") %>%
-        layout(mapbox=list(style="carto-positron",
-                           center=list(lat=mean(ssc_df$lat),lon=mean(ssc_df$lon)),zoom=12),
-               margin=list(l=0,r=0,t=0,b=0),paper_bgcolor=COLOR_CARD,
-               title=list(text="SSC modelada (mg/L) — Río Magdalena",
-                          font=list(color=COLOR_TEXT,size=14)))
+        layout(
+          mapbox=list(style="carto-positron",
+                      center=list(lat=mean(ssc_df$lat), lon=mean(ssc_df$lon)), zoom=12),
+          margin=list(l=0,r=0,t=40,b=0), paper_bgcolor=COLOR_CARD,
+          font=list(family="'Lato',sans-serif", size=12, color=COLOR_TEXT),
+          title=list(text=paste0("SSC modelada (mg/L) — Río Magdalena · ", label),
+                     font=list(color=COLOR_TEXT, size=14))
+        )
     }, error=function(e) {
-      plot_ly() %>% layout(paper_bgcolor=COLOR_CARD,
-                           annotations=list(list(text=paste0("Error: ",e$message),
-                                                 x=0.5,y=0.5,xref="paper",yref="paper",showarrow=FALSE,
-                                                 font=list(size=13,color="#c0392b"))))
+      fig_vacia(paste0("Error: ", e$message))
     })
   })
   
